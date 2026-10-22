@@ -76,3 +76,29 @@ Para cada atualização upstream relevante:
 5. Marcar como *corrigido* apenas com evidência de execução do cliente e servidor da versão testada; se regressão, não promover.
 
 **Último estado confirmado nesta documentação:** PRs #49, #50, #51 e #54 foram incorporadas ao upstream em 22/10/2026; **não existe teste local confirmado** da compilação posterior nem prova de correção do spam manual. Atualizações futuras do upstream não são incorporadas automaticamente por este documento.
+
+## Reteste no cliente atualizado — 22/10/2026 (feedback e duas imagens)
+
+**Estado real:** o usuário executou o script de compilação e o jogo de teste abriu. As imagens comprovam a sessão em jogo; o **SHA do binário efetivamente carregado ainda não foi verificado no log da compilação**, por isso não atribuir o resultado a um commit específico sem confirmação.
+
+**Melhorias percebidas pelo usuário:**
+- Rajada de Flechas / **Double Strafe Nv.10**, tecla **4**: aparecem dois danos brancos de **1263** e **1262**, e um total amarelo de **2525**, corretamente igual à soma. Preservar o multi-hit e a fórmula de dano.
+- Tecla **1**, ataque básico: o dano real **aparenta** respeitar o intervalo entre ataques mesmo pressionando repetidamente.
+- Usuário considera que o dano parece corresponder à descrição das habilidades. Ainda não houve medição de HP/eventos do servidor para comprovação quantitativa.
+
+**Defeitos visuais ainda reproduzidos pelo usuário:**
+1. **Spam de animações:** teclas **1** e **4** podem ser pressionadas repetidamente, provocando animações excessivas mesmo quando o dano já é limitado. Precisamos diferenciar cast autorizado de antecipação de animação local.
+2. **Cooldown no botão:** algumas habilidades entram em recarga, mas o ícone não mostra o indicador ou a contagem; **nenhuma habilidade com CD positivo foi identificada de modo inequívoco nas duas capturas**.
+
+**Detalhe essencial da primeira captura:** o tooltip de **Double Strafe Nv.10** mostra **Conjuração 0.0 s** e **Recarga 0.0 s**. Assim, **a falta de contador para essa habilidade não comprova bug**; intervalo de ação, velocidade de ataque e cooldown são mecanismos diferentes.
+
+### Pontos concretos do código verificados
+
+- `src/Ro3Emu.Server/Game/CombatService.Casting.cs` já valida cooldown em `CastCoreAsync` e envia `SkillCdNotify` por `StartCooldownAsync` somente quando a duração calculada é **positiva**. Os campos usam **grupo da skill**, modo, início e fim; mensagem de rede **31113**.
+- `tests/Ro3Emu.Tests/MapTests.cs` possui teste de recepção de `31113` e rejeição `3012` em cooldown; isso não testa a exibição de recarga na interface Unity.
+- `src/Ro3Emu.ClientHooks/LuaPatches.cs` já modifica funções Lua no cliente por wrappers de C#, mas **a função exata de entrada de ataque e o consumidor visual do cooldown ainda não foram localizados/validados**.
+- Hipótese de trabalho: o cliente pode iniciar a animação antes de receber a resposta do servidor. **Não é causa comprovada.** Não mudar artificialmente cooldown, dano, ASPD, as regras de cancelamento ou duas parcelas da habilidade sem identificar o consumidor correto.
+
+**Próxima intervenção técnica:** rastrear a sequência `31102` (pedido/resposta), `31100` (animação aceita), `31103/31124` (fim/interrupção), `31113` (cooldown) e os respectivos consumidores locais Unity/Lua. Reproduzir spam rápido versus 1 toque versus batalha automática. Identificar uma skill cuja `_iCD` seja maior que zero para testar o indicador do atalho. Corrigir a apresentação no cliente somente depois de verificar o caminho original, e validar in-game.
+
+**Não chamar de corrigido:** animações e cooldown visual continuam com defeitos reportados, apesar da melhora aparente no dano. A instalação principal permanece preservada.
