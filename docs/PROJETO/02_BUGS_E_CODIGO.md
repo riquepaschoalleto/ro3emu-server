@@ -102,3 +102,11 @@ Para cada atualização upstream relevante:
 **Próxima intervenção técnica:** rastrear a sequência `31102` (pedido/resposta), `31100` (animação aceita), `31103/31124` (fim/interrupção), `31113` (cooldown) e os respectivos consumidores locais Unity/Lua. Reproduzir spam rápido versus 1 toque versus batalha automática. Identificar uma skill cuja `_iCD` seja maior que zero para testar o indicador do atalho. Corrigir a apresentação no cliente somente depois de verificar o caminho original, e validar in-game.
 
 **Não chamar de corrigido:** animações e cooldown visual continuam com defeitos reportados, apesar da melhora aparente no dano. A instalação principal permanece preservada.
+
+## Novo relato — árvore de habilidades inadequada (22/10/2026)
+
+O usuário relatou que **a árvore de habilidades está bastante problemática** e que isso está desmotivando a continuação do projeto. **Problema prioritário e ainda não classificado**: não foi fornecida uma captura desta janela nem descrição concreta de se o defeito é visual, progressão/pontos, desbloqueio, níveis ou habilidades ausentes. Não inventar diagnóstico nem implementar mudança ampla às cegas.
+
+**Upstream consultado:** PR [#56](https://github.com/aethai/ro3emu-server/pull/56), merge em 22/10/2026, commit `84bffd99c89c42006ff120a084fecb21682b3755`, adiciona execução de vários efeitos das **passivas** da árvore e corrige mapeamentos de passivas anteriores. **Não atesta correção de layout, alocação ou organização visual da árvore.** Issue [#15](https://github.com/aethai/ro3emu-server/issues/15) (talento não desbloqueava, versão 1.0.4) foi encerrada; não vincular automaticamente ao bug atual. No momento da consulta, upstream estava 3 commits à frente do último SHA upstream sincronizado no fork (`047f05cf`); **não atualizar build ou main sem processo de integração e validação**.
+
+**Próximo dado necessário:** uma imagem da árvore problemática ou descrição exata de um erro reproduzível para separar cliente/UI de regras de progressão no servidor; somente então abrir intervenção localizada. **Prioridade elevada** em relação a polimento visual secundário. Preservar danos e funcionamento atual, evitar novas pastas, reinstalações ou builds desnecessários.
