@@ -1,7 +1,7 @@
 # RAGNAROK 3 / RO3Emu — START HERE
 
 **Última atualização do registro:** 22/10/2026  
-**Situação:** cliente e servidor local comprovadamente funcionando; versão de teste com código-fonte atualizado **ainda não confirmada como compilada ou executada**. Fork público confirmado em `riquepaschoalleto/ro3emu-server`, com branch `dev/ro3-stabilization` criada para documentação e correções.
+**Situação:** cliente e servidor local comprovadamente funcionando. Após executar o script de compilação, o usuário exibiu **capturas do jogo de teste aberto**, com melhora aparente do dano na tecla 1 e na Rajada de Flechas; **o SHA do binário carregado ainda não foi confirmado por log**. Persistem spam de animações nas teclas 1/4 e relatos de cooldown visual ausente em outras skills. Veja `02_BUGS_E_CODIGO.md`. Fork público e branch `dev/ro3-stabilization` ativos.
 
 ## Objetivos e ordem de execução
 
@@ -46,9 +46,9 @@ $home = "$base\RO3Emu-TESTE"
 
 Motivo: `$HOME` é uma variável automática protegida no PowerShell (sem diferenciação entre maiúsculas e minúsculas).
 
-Foi entregue um **script corrigido**, utilizando `$pastaTeste` e `$clienteTeste`, mas **não existe confirmação de que o usuário o executou ou de que a compilação terminou**. Não declarar a versão teste pronta. O screenshot do GitHub não comprova clone local do repositório.
+Posteriormente, foram criadas cópias locais de teste e uma compilação anterior em `RO3Emu-Fonte-4c113c90`. Também existe `RO3Emu-Codigo` associado ao GitHub. Em 22/10, o usuário relatou ter executado o script de compilação mais recente e enviou **duas capturas do jogo rodando**; isso confirma a sessão de teste, mas **não verifica o SHA exato compilado**. Não repetir download do cliente nem criar mais pastas.
 
-**Próxima ação técnica:** o fork foi criado e os `.md` estão na branch `dev/ro3-stabilization`; verificar as pastas de teste e o SDK .NET 10 existentes antes de rodar novos comandos. Se a preparação ainda não tiver acontecido, seguir `03_TESTE_SEPARADO.md`. Não presumir que a compilação funcionou.
+**Próxima ação técnica:** confirmar o SHA efetivamente usado pelo iniciador de teste e isolar problemas **visuais** remanescentes: animações provocadas por spam das teclas 1/4 e ausência de overlay para uma habilidade com cooldown positivo. Tooltip de Double Strafe Nv.10 indica recarga 0.0 s; não inventar CD para ela. Ver detalhes no `02_BUGS_E_CODIGO.md`. Preservar a melhoria do dano e não recompilar ou duplicar pastas sem necessidade.
 
 ## Arquivos deste conjunto
 
@@ -68,4 +68,4 @@ Foi entregue um **script corrigido**, utilizando `$pastaTeste` e `$clienteTeste`
 
 ## Para retomar em outro chat
 
-> Estamos trabalhando no Ragnarok 3 / RO3Emu em Windows 11. Leia os cinco arquivos `.md` deste projeto como fonte do estado atual. Cliente oficial (22,6 GB) e servidor local funcionaram em `D:\PROJETOS\RO3`. Objetivo imediato: bugs e versões de teste acompanhando o upstream; conteúdo próprio apenas depois de estabilizar. Criar e validar uma cópia de teste usando código recente do `aethai/ro3emu-server`, sem alterar a instalação principal, para investigar spam da tecla 1 e animação da tecla 4. Primeiro script falhou por usar `$home` no PowerShell; script corrigido foi fornecido, mas sua execução **não foi confirmada**. Não invente conclusão de testes, não baixe novamente o cliente e não exponha o servidor online agora.
+> Estamos trabalhando no Ragnarok 3 / RO3Emu em Windows 11. Leia os cinco arquivos `.md` deste projeto como fonte do estado atual. Cliente oficial (22,6 GB) e servidor local funcionaram em `D:\PROJETOS\RO3`. Objetivo imediato: bugs e versões de teste acompanhando o upstream; conteúdo próprio apenas depois de estabilizar. Já existem cópias de teste e o usuário mostrou duas capturas do jogo rodando após executar o script de compilação; confirmar SHA exato da build antes de atribuir alterações ao commit. Dano da Rajada de Flechas mostrou 1263 + 1262 = 2525; spam visual das teclas 1 e 4 permanece. Tooltip de Double Strafe mostra recarga 0.0 s; cooldown visual ausente é relatado em outras skills, ainda não identificadas por ID. Não invente conclusão de testes, não baixe novamente o cliente e não exponha o servidor online agora.
