@@ -69,3 +69,11 @@ Posteriormente, foram criadas cópias locais de teste e uma compilação anterio
 ## Para retomar em outro chat
 
 > Estamos trabalhando no Ragnarok 3 / RO3Emu em Windows 11. Leia os cinco arquivos `.md` deste projeto como fonte do estado atual. Cliente oficial (22,6 GB) e servidor local funcionaram em `D:\PROJETOS\RO3`. Objetivo imediato: bugs e versões de teste acompanhando o upstream; conteúdo próprio apenas depois de estabilizar. Já existem cópias de teste e o usuário mostrou duas capturas do jogo rodando após executar o script de compilação; confirmar SHA exato da build antes de atribuir alterações ao commit. Dano da Rajada de Flechas mostrou 1263 + 1262 = 2525; spam visual das teclas 1 e 4 permanece. Tooltip de Double Strafe mostra recarga 0.0 s; cooldown visual ausente é relatado em outras skills, ainda não identificadas por ID. Não invente conclusão de testes, não baixe novamente o cliente e não exponha o servidor online agora.
+
+## Sincronização upstream concluída no GitHub — 23/10/2026
+
+- **Upstream `aethai/ro3emu-server` main:** `191510412757bd6126235113af134a8f5c138d15` (release v1.0.15); avanço de **43 commits** desde `047f05cf` e 70 arquivos alterados.
+- **Nosso fork `main`:** atualizado por fast-forward, sem forçar histórico, para o mesmo commit `19151041`.
+- **Nossa branch `dev/ro3-stabilization`:** atualizada pela [PR #1](https://github.com/riquepaschoalleto/ro3emu-server/pull/1), merge commit `8ee9c71bbfba28235ced75b9dc564db36358da93`, preservando os documentos em `docs/PROJETO/`.
+- **Estado do PC:** a atualização do GitHub **não executa pull, compilação ou testes no Windows**. O usuário deve atualizar `D:\PROJETOS\RO3\RO3Emu-Codigo` e compilar no ambiente de teste existente, sem baixar/duplicar o cliente de 22,6 GB.
+- **Regressões prioritárias:** verificar cooldown da PR upstream #63, spam visual [1]/[4], dano de Double Strafe (dois hits, total amarelo) e árvore de habilidades. Nem a atualização do fork nem a existência da release comprovam correção in-game.
