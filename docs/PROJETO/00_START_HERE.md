@@ -77,3 +77,14 @@ Posteriormente, foram criadas cópias locais de teste e uma compilação anterio
 - **Nossa branch `dev/ro3-stabilization`:** atualizada pela [PR #1](https://github.com/riquepaschoalleto/ro3emu-server/pull/1), merge commit `8ee9c71bbfba28235ced75b9dc564db36358da93`, preservando os documentos em `docs/PROJETO/`.
 - **Estado do PC:** a atualização do GitHub **não executa pull, compilação ou testes no Windows**. O usuário deve atualizar `D:\PROJETOS\RO3\RO3Emu-Codigo` e compilar no ambiente de teste existente, sem baixar/duplicar o cliente de 22,6 GB.
 - **Regressões prioritárias:** verificar cooldown da PR upstream #63, spam visual [1]/[4], dano de Double Strafe (dois hits, total amarelo) e árvore de habilidades. Nem a atualização do fork nem a existência da release comprovam correção in-game.
+
+## Sincronização completa com upstream, web e cliente — 30/10/2026
+
+- Original aethai/ro3emu-server, main: `7cf31d446d957c9355dc5e9a85910c3faf3624f7` (v1.0.23 e commits posteriores).
+- Fork riquepaschoalleto/ro3emu-server, main: fast-forward para o mesmo SHA; 365 commits incorporados desde 19151041.
+- Branch dev/ro3-stabilization: [PR #2](https://github.com/riquepaschoalleto/ro3emu-server/pull/2) integrada sem conflitos, merge `b3303c6f703b357665b8db3d5ae0a9ca18c34baf`; os cinco documentos do projeto foram preservados.
+- Incluídos: correções de combate e HunterAttack/ASPD, projéteis, painel GM e presets, launcher, `Ro3Emu.Panel` (portal/admin web), exportador de imagens `Ro3Emu.DataExport/IconExport`, dungeons, guildas e War of Emperium.
+- Preparado iniciador PowerShell isolado: `scripts/INICIAR_RO3_TESTE_WEB.ps1`. Ele usa o cliente e os dados de TESTE existentes, valida o ambiente, faz backup do banco de teste, compila a versão atual e abre o servidor com painel web local na porta 5391. Ele pede a conta de login GM para o administrador do painel.
+- Manual atualizado: [05_WEB_PANEL_E_TESTES.md](05_WEB_PANEL_E_TESTES.md). Manual upstream do painel: [docs/guide/panel.md](../guide/panel.md).
+- **Confirmado remotamente:** sincronização GitHub e criação desses arquivos. **Não confirmado no PC:** pull, build, inicialização, exportação dos ~2.500 PNG, acesso HTTP, migrações e testes in-game. Não afirmar que as animações [1]/[4] foram corrigidas antes de testar.
+- Instalação principal `RO3Emu` e cliente principal `ROO_PC` permanecem fora do escopo. Sem sobrescrever seus dados ou baixar outra cópia do cliente.
