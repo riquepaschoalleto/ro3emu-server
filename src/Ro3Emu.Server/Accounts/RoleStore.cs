@@ -29,6 +29,9 @@ public sealed class RoleProgress
     public int BonusPoints { get; set; }
     public Dictionary<int, long> Currency { get; } = new();
     public bool StarterKit { get; set; }
+    /// <summary>Astral Level (Paragon, PatronLevelConfig) and the EXP toward the next one; ParagonService.</summary>
+    public int ParagonLevel { get; set; }
+    public long ParagonExp { get; set; }
 
     /// <summary>Learned skill levels by skill group id (SkillConfig._iSkillID).</summary>
     public Dictionary<int, int> Skills { get; } = new();
@@ -381,6 +384,10 @@ public sealed class RoleStore(AccountStore accounts)
     public byte[]? LoadCareerSpecial(long id) => LoadBlob(id, "career_special");
     public void SaveCareerSpecial(long id, byte[] value) => SaveBlob(id, "career_special", value);
     public byte[]? LoadHeroicSpirit(long id) => LoadBlob(id, "heroic_spirit");
+    public byte[]? LoadParagon(long id) => LoadBlob(id, "paragon");
+    public byte[]? LoadTitle(long id) => LoadBlob(id, "title");
+    public void SaveTitle(long id, byte[] value, RoleItemPlanBuilder? transaction = null) => SaveBlob(id, "title", value, transaction);
+    public void SaveParagon(long id, byte[] value, RoleItemPlanBuilder? transaction = null) => SaveBlob(id, "paragon", value, transaction);
     public byte[]? LoadAreaConcur(long id) => LoadBlob(id, "area_concur");
     public void SaveAreaConcur(long id, byte[] value, RoleItemPlanBuilder? transaction = null) => SaveBlob(id, "area_concur", value, transaction);
     public byte[]? LoadGrowthClass(long id) => LoadBlob(id, "growth_class");
@@ -468,6 +475,8 @@ public sealed class RoleStore(AccountStore accounts)
     public void SaveEmblems(long id, byte[] emblems, RoleItemPlanBuilder? transaction = null) => SaveBlob(id, "emblems", emblems, transaction);
 
     public void SaveShop(long id, byte[] shop, RoleItemPlanBuilder? tx = null) => SaveBlob(id, "shop", shop, tx);
+    public byte[]? LoadGifts(long id, RoleItemPlanBuilder? transaction = null) => LoadBlob(id, "gifts", transaction);
+    public void SaveGifts(long id, byte[] gifts, RoleItemPlanBuilder? tx = null) => SaveBlob(id, "gifts", gifts, tx);
     public byte[]? LoadGuildInfo(long id) => LoadBlob(id, "guild_info");
     public void SaveGuildInfo(long id, byte[] info, RoleItemPlanBuilder? transaction = null) => SaveBlob(id, "guild_info", info, transaction);
 
@@ -669,6 +678,8 @@ public sealed class RoleStore(AccountStore accounts)
             JobExp = r.GetInt64(4),
             BonusPoints = r.GetInt32(6),
             StarterKit = r.GetInt32(8) != 0,
+            ParagonLevel = r.GetInt32(11),
+            ParagonExp = r.GetInt64(12),
         };
         var stats = r.GetString(5).Split(',');
         for (int i = 0; i < p.Stats.Length && i < stats.Length; i++) p.Stats[i] = int.TryParse(stats[i], out var v) ? v : 1;

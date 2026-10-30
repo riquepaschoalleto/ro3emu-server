@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Ro3Emu.Server.Data;
+using Ro3Emu.Server.Data.Config;
 
 namespace Ro3Emu.Server.Maps;
 
@@ -78,6 +79,13 @@ public sealed class MapWorld
     public IReadOnlyList<SpawnGroup> SpawnGroups { get; init; } = [];
     public IReadOnlyList<GatheringSpawnPoint> GatheringPoints { get; init; } = [];
     public IReadOnlyDictionary<long, MapRegion> Regions { get; init; } = new Dictionary<long, MapRegion>();
+    /// <summary>The scene editor's air walls (SceneEditorAirWalls), off until a dungeon switches them on (var 133).</summary>
+    public IReadOnlyDictionary<long, SceneAirWall> AirWalls { get; init; } = new Dictionary<long, SceneAirWall>();
+    /// <summary>The scene editor's guide routes (SceneEditorGuides), drawn when a scene sets dungeon var 10021.</summary>
+    public IReadOnlyList<long> GuideRoutes { get; init; } = [];
+    /// <summary>The points of each guide route, id -> (x, y, z) list (a scripted ride walks one).</summary>
+    public IReadOnlyDictionary<long, IReadOnlyList<(float X, float Y, float Z)>> GuidePaths { get; init; } =
+        new Dictionary<long, IReadOnlyList<(float X, float Y, float Z)>>();
 
     /// <summary>Dungeon m_kGroups joined to m_kMonsterSpawnPoints; templates/timing belong to PetFloorConfig.</summary>
     public IReadOnlyDictionary<int, IReadOnlyList<SpawnPoint>> DungeonGroups { get; init; } = new Dictionary<int, IReadOnlyList<SpawnPoint>>();
@@ -85,15 +93,46 @@ public sealed class MapWorld
     public WorldNpc? Portal(int travelPointId) =>
         Npcs.FirstOrDefault(n => n.Kind == WorldNpcKind.Portal && GameData.Int(n.Entry, "TravelPointID") == travelPointId);
 
-    /// <summary>Kafra teleport arrival: the map's Kafra point flagged IsKaPuLaPos (+ foothold).</summary>
+    /// <summary>Kafra teleport arrival: the map's Kafra point flagged IsKaPuLaPos (+ foothold), moved onto walkable ground.</summary>
     public MapPoint? KafraArrival =>
-        Npcs.FirstOrDefault(n => n.Kind == WorldNpcKind.Kafra && n.Entry.TryGetProperty("IsKaPuLaPos", out var k) && k.ValueKind == JsonValueKind.True)?.Arrival;
+        Npcs.FirstOrDefault(n => n.Kind == WorldNpcKind.Kafra && n.Entry.TryGetProperty("IsKaPuLaPos", out var k) && k.ValueKind == JsonValueKind.True)?.Arrival
+            is { } arrival ? Standable(arrival) : null;
 
     /// <summary>The point with y moved onto the walkable layer nearest to it (the client takes y as sent).</summary>
     public MapPoint Grounded(MapPoint p) =>
         Nav?.WalkHeight(p.X, p.Z, p.Y) is { } h ? p with { Y = h } : p;
 
     public bool IsWalkable(float x, float y, float z) => Nav?.IsWalkable(x, y, z) ?? true;
+
+    /// <summary>
+    /// A point a player can stand on: the point itself when walkable at its height, else its cell's walkable layer, else
+    /// the nearest walkable cell centre within <paramref name="radius"/> m (ring by ring, the layer nearest to y). Scene
+    /// editor arrivals can sit inside scenery (#bug-reports: the Kafra warp to Southern Payon lands in a rock). Without
+    /// a nav grid, or with no walkable cell near, the point is returned unchanged (inferred).
+    /// </summary>
+    public MapPoint Standable(MapPoint p, int radius = 8)
+    {
+        if (Nav is not { } nav || nav.IsWalkable(p.X, p.Y, p.Z)) return p;
+        if (nav.WalkHeight(p.X, p.Z, p.Y) is { } h && MathF.Abs(h - p.Y) <= NavGrid.WalkHeightTolerance) return p with { Y = h };
+        int cx = (int)MathF.Floor(p.X), cz = (int)MathF.Floor(p.Z);
+        for (int r = 1; r <= radius; r++)
+        {
+            MapPoint? best = null;
+            float bestDistance = float.MaxValue;
+            for (int dx = -r; dx <= r; dx++)
+                for (int dz = -r; dz <= r; dz++)
+                {
+                    if (Math.Max(Math.Abs(dx), Math.Abs(dz)) != r) continue;
+                    float x = cx + dx + 0.5f, z = cz + dz + 0.5f;
+                    if (nav.WalkHeight(x, z, p.Y) is not { } y) continue;
+                    float distance = (x - p.X) * (x - p.X) + (z - p.Z) * (z - p.Z) + (y - p.Y) * (y - p.Y);
+                    if (distance < bestDistance) { bestDistance = distance; best = p with { X = x, Y = y, Z = z }; }
+                }
+            if (best is { } found) return found;
+        }
+        return p;
+    }
+
 }
 
 /// <summary>
@@ -249,7 +288,9 @@ public sealed partial class WorldData(IOptions<ServerOptions> options, GameData 
         return new MapWorld
         {
             SceneEntry = sceneEntry, Born = born, Revive = revive, Npcs = npcs, Points = points, Nav = map.Nav, SpawnGroups = spawnGroups,
-            GatheringPoints = LoadGatheringPoints(se, sceneEntry), DungeonGroups = LoadDungeonGroups(se), Regions = LoadRegions(se)
+            GatheringPoints = LoadGatheringPoints(se, sceneEntry), DungeonGroups = LoadDungeonGroups(se), Regions = LoadRegions(se),
+            GuideRoutes = SceneEditorGuides.RouteIds(se), GuidePaths = SceneEditorGuides.Paths(se),
+            AirWalls = SceneEditorAirWalls.Read(se)
         };
     }
 
@@ -290,7 +331,7 @@ public sealed partial class WorldData(IOptions<ServerOptions> options, GameData 
         return groups;
     }
 
-    private static List<SpawnGroup> LoadSpawnGroups(JsonElement se)
+    internal static List<SpawnGroup> LoadSpawnGroups(JsonElement se)
     {
         var points = new Dictionary<int, List<SpawnPoint>>();
         if (se.TryGetProperty("m_kWorldMonsterSpawnPoints", out var ps) && ps.ValueKind == JsonValueKind.Object)

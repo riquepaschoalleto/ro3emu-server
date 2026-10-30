@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Globalization;
 using System.Text.Json;
 using Google.Protobuf;
 using Romsg;
@@ -154,8 +155,11 @@ public sealed partial class ChatService
             await session.SendGameAsync(JoinChannel, new JoinChatChannelRsp { Result = ErrorCodes.NotInGuild, Req = req });
             return;
         }
-        Join(session, req.GroupId);
+        bool newlyJoined = Join(session, req.GroupId);
         await session.SendGameAsync(JoinChannel, new JoinChatChannelRsp { Result = 0, Req = req });
+        // Repeated subscriptions still need their ACK, but replaying history would duplicate
+        // lines already delivered to this session. Leaving/rejoining starts a fresh subscription.
+        if (!newlyJoined) return;
         List<TextChatMessage> recent;
         lock (_sync) recent = _recent.TryGetValue(HistoryKey(req.GroupId, session), out var lines) ? lines.ToList() : new();
         long runtime = session.WorldScene, generation = session.SceneGeneration;
@@ -267,6 +271,10 @@ public sealed partial class ChatService
         }
     }
 
+    /// <summary>A line delivered on a group channel, with the ChatChannelType its id starts with ("2_guild"; quest
+    /// target 103020, TaskService.MiscTargets.cs).</summary>
+    public List<Action<GameSession, int>> TextSent { get; } = [];
+
     private async Task SendTextAsync(GameSession sender, SendTextChatMessageRequest req)
     {
         if (!GuildAllowed(sender, req.ReceiveId))
@@ -343,6 +351,9 @@ public sealed partial class ChatService
         _log.LogInformation("Chat {Name} -> {Target} ({Count} recipient(s)): {Text}", sender.Role.Name, req.ReceiveId, recipients.Count, req.Content);
 
         await DownAsync(sender, Cmd.SendText, new SendTextChatMessageResponse { ChatResult = true, Msg = message });
+        if (req.ChatType != ChatTypePrivate && int.TryParse(req.ReceiveId.AsSpan(0, Math.Max(0, req.ReceiveId.IndexOf('_'))),
+            NumberStyles.None, CultureInfo.InvariantCulture, out int channel))
+            foreach (var handler in TextSent) handler(sender, channel);
         // Every recipient gets the push, the sender included: the send response alone does not add the line.
         var push = new NotifyNewTextChatMessage { Msg = message };
         foreach (var to in recipients)
@@ -425,13 +436,14 @@ public sealed partial class ChatService
             catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or ObjectDisposedException) { }
     }
 
-    private void Join(GameSession session, string group)
+    private bool Join(GameSession session, string group)
     {
         lock (_sync)
         {
             if (!_groups.TryGetValue(group, out var members)) _groups[group] = members = new();
-            members.Add(session);
+            bool added = members.Add(session);
             session.ChatGroups.Add(group);
+            return added;
         }
     }
 

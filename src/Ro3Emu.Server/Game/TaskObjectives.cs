@@ -110,6 +110,14 @@ public sealed partial class TaskService
     private const int TStunts = 302005, TPetRoom = 306004, TTenBossWin = 106602, TTreasureDig = 106802,
         TCoffinOrSurvivor = 210012, TDragonCoffin = 210009, TLeagueJoin = 106603, TGveJoin = 103014;
 
+    // Survivor Battle weekly targets (TaskConfig 2501-2507, type 10), LC_InteractCondition Chicken* (:2030-2050 and the
+    // default formatter): 106501 ChickenRankWeek [top, n], 106502 ChickenUseItem [item type, n] and 106505
+    // ChickenEquipTeam [quality, n] count p3; 106503 ChickenKillMonster [n], 106504 ChickenBox [n], 106506
+    // ChickenDisguiseTeam [n, first, last] and 106507 ChickenKillPlayerTeam [n] count p2. Each counts what a settled match
+    // brought (TimedBattleService.Settlement stages them with the 106509 match count).
+    internal const int TChickenRank = 106501, TChickenUse = 106502, TChickenMonster = 106503, TChickenBox = 106504,
+        TChickenEquip = 106505, TChickenDisguise = 106506, TChickenKill = 106507;
+
     // Everyday state and activity targets (default formatter, R = p2, unless said otherwise).
     // - 104007 CheckJoinGuild [1] (side quest 10200080): in a guild now.
     // - 103019 CheckFriend [n] "Have ${1} friends" (side quest 10200090): the friend list's size (FriendService relation,
@@ -138,7 +146,18 @@ public sealed partial class TaskService
     //   Battles" (LC_InteractCondition.lua:1403-1445): one per settled siege the role was loaded into / its guild won.
     // - 106801 [n] "Log in ${1} times" (110007, Lost Treasure): one per login while the quest runs; the login that
     //   accepts it counts as the first (inferred).
-    private const int TGvgJoin = 106605, TGvgWin = 106606, TLogin = 106801;
+    // - 106610 [n] "Reach @{1} Battle Merit" (120001-120005, Realm Campaign 107; ProgressConfig "Earn a total of ${1} Personal
+    //   Points in the Territory War"): the Battle Merit points earned this Territory War season (TerritoryWarsService
+    //   GloryState.Points, not the spendable currency 15).
+    private const int TGvgJoin = 106605, TGvgWin = 106606, TLogin = 106801, TBattleMerit = 106610;
+
+    /// <summary>106610: this season's Battle Merit points of a loaded role, -1 before it loads (TerritoryWarsService.GloryPoints).</summary>
+    public Func<GameSession, long>? BattleMeritPoints { get; set; }
+
+    // 106010 BarroomToDayActTime [n] "Today's active time in the Tavern" is the Tavern quest's target (TaskConfig 2000,
+    // type 9, [106010,1200]); the guild To-Do tasks reuse it as a stand-in, [106010,5] (TaskService.GuildEvents). Only
+    // those are supported: this server has no Tavern, so the Tavern quest stays without a producer.
+    private const int TBarroomActTime = 106010;
 
     private readonly ConditionalWeakTable<MonsterUnit, HashSet<long>> _participants = new();
     private readonly HashSet<GameSession> _refreshQueued = new();
@@ -164,8 +183,11 @@ public sealed partial class TaskService
             or TTalentLevels or TPetsDeployed or TTowerFloor or TGuildHunt or TDraculaWedding or TPetSupport
             or TPetRoom or TTreasureDig or TCoffinOrSurvivor or TDragonCoffin or TGveJoin or TFriends or TEchoLevelSum
             or TEchoUpgrade or TTowerJoin or TTowerWin or TTowerFloorReached or TLike or TLiveness or TCampfire
-            or TGvgJoin or TGvgWin or TLogin, var n] => n,
+            or TGvgJoin or TGvgWin or TLogin or TBarroomActTime or TBattleMerit, var n] => n,
         [TTenBossWin, var n, _, ..] => n,
+        [TChickenRank or TChickenUse or TChickenEquip, _, var n] => n,
+        [TChickenMonster or TChickenBox or TChickenKill, var n] => n,
+        [TChickenDisguise, var n, _, _] => n,
         [TLeagueJoin, _, var n] => n,
         [TLeagueScore, _, _, var n] => n,
         [TSiegeScore, _, var n] => n,
@@ -181,12 +203,14 @@ public sealed partial class TaskService
         [TSaplingChosen or TDeclaration, var n] => n, // Adventure Group (TaskService.AdventureGroup.cs)
         [TWaterSapling, var n, _] => n,
         [TKill or TKillInvolved, _, _, ..] => t[^1],
+        [TConnectMvp or TConnectBoss, var n, _] => n, // Connect quests (TaskService.Connect.cs)
+        [TConnectSurvivor or TConnectAfk, var n] => n,
         [TClientInteract or TMapKill or TUse or TCardStars or TCardQuality or TTreasure or TSlotRefine
             or TCraftQuality or TCollect or TEquipmentQuality or TStrength or TSkillRank or TRestrictUse, _, var n] => n,
         [TEquipment, _, _, var n] => n,
         [TCraft, _, _, var n, _] => n,
         [TSubmit, _, var n, _] => n,
-        _ => -1,
+        _ => EventTargetRequired(t), // TaskService.EventTargets.cs
     };
 
     private bool Supported(long[] t)
@@ -223,13 +247,13 @@ public sealed partial class TaskService
             TLeagueJoin => t[1] is >= 0 and <= 3,
             TLeagueScore => t[1] is >= 0 and <= 2 && t[2] >= 0,
             TSiegeScore => t[1] >= 0,
-            _ => true, // Only the explicit formatter cases above can reach here.
+            _ => MiscSupported(t), // Only the explicit formatter cases above can reach here.
         };
     }
 
     /// <summary>Every target of the quest has a supported reader and a positive R (a quest without one never ends).</summary>
     internal bool TargetsSupported(long taskId) => Defs().TryGetValue(taskId, out var def) && def.Targets.Length > 0
-        && def.Targets.All(t => Supported(t) && Required(null, t) > 0);
+        && def.Targets.All(t => Supported(t) && Required(null, t) > 0 && (t[0] != TBarroomActTime || GuildEventTask(def.Id)));
 
     private bool ItemExists(long id) => id > 0 && id <= int.MaxValue && _data.Row("ItemConfig", id) != null;
 
@@ -319,7 +343,8 @@ public sealed partial class TaskService
             TFriends => FriendCount(s),
             TEchoLevelSum => EmblemService.Worn(s).Sum(i => i.Attrs?.GetValueOrDefault(1001) ?? 0),
             TLiveness => _character.CountOf(s, 5),
-            _ => -1,
+            TBattleMerit => BattleMeritPoints?.Invoke(s) ?? -1,
+            _ => EventTargetValue(s, t), // TaskService.EventTargets.cs
         };
     }
 

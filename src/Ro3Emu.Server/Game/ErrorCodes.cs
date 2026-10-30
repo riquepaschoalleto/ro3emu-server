@@ -39,6 +39,9 @@ public static class ErrorCodes
     public const int ActivityClosed = 3902;      // "Event Not Available"
     public const int ActivityPeriod = 5801;      // "Not in the event period"
     public const int ActivityReward = 1511;      // "Invalid Activity Reward ID"
+    // Starshatter ritual (FlyingDragonService): ErrorCodeConfig 1517-1526.
+    public const int DragonBusy = 1517, DragonPlace = 1518, DragonAssisted = 1519, DragonItems = 1520, DragonSelf = 1521;
+    public const int DragonNoLike = 1522, DragonLiked = 1523, DragonDone = 1524, DragonConfig = 1525, DragonCooldown = 1526;
     public const int BattlePassClosed = 8260, BattlePassLevel = 8261, BattlePassClaimed = 8262;
     public const int BattlePassLevelRequired = 8263, BattlePassRewardType = 8264, BattlePassPremium = 8265;
     public const int BattlePassNoRewards = 8266, BattlePassMaxLevel = 8267, BattlePassExpFull = 8268, BattlePassCurrency = 8269;
@@ -121,10 +124,15 @@ public static class ErrorCodes
     // Scenes
     public const int SceneMissing = 266;        // "The scene does not exist"
     public const int SwitchingScenes = 284;     // "Switching scenes"
+    public const int TeleportExpired = 292;     // "The instance teleport skill has expired."
+    public const int TeleportFull = 293;        // "The instance teleport skill is full."
+    public const int TeleportDead = 828;        // client-only text 61169 "Cannot teleport while dead." (LC_DAL_Dungeon)
+    public const int TeleportRiding = 5203;     // client-only text 61168 "Cannot teleport while riding a mount."
 
     // Skills
     public const int SkillPointsShort = 307;    // "Not enough skill points"
     public const int SkillMaxLevel = 319;       // "Skill Level exceeds the maximum level"
+    public const int LevelTooLow = 31016;       // UIWords 31016: the title rank's level requirement (inferred code)
     public const int SkillPrerequisite = 333;   // "The level of prerequisite skill is too low"
     public const int SkillNotInTree = 341;      // "This skill is not in the skill tree ..."
 
@@ -213,6 +221,9 @@ public static class ErrorCodes
     public const int AlreadyInGuild = 463, GuildMissing = 464, GuildPermission = 466, GuildNameTaken = 470;
     public const int GuildPositionFull = 471, GuildApplicationMissing = 482, GuildInviteInvalid = 481;
     public const int GuildApplicationLimit = 468, GuildApplicationListFull = 469;
+    // War machines: 530 "Cannot place this here." (enum_ErrorCode.ERR_GuildAttackCityBuildError, LC_GVGBuildCannon.Build),
+    // 535 "Not enough guild supplies" (an empty war warehouse, inferred).
+    public const int GuildCannonPlace = 530, GuildSupplies = 535;
     // Guild League (ErrorCodeConfig 516-524).
     public const int LeagueClosed = 516, LeagueTemporary = 517, LeagueElite = 518, LeagueMainFull = 523;
     // Elite roster (ErrorCodeConfig 10046-10048, 10059): not a member, the roster changed meanwhile, position too low,
@@ -225,6 +236,17 @@ public static class ErrorCodes
     public const int GuildNameInvalid = 10000, GuildNameNumbers = 10001, GuildLevelCreate = 10002;
     public const int GuildIconLocked = 10003, GuildFrameLocked = 10004, GuildJoinLevel = 10008;
     public const int GuildTextLength = 10027;
+    public const int GuildMailDaily = 10025, GuildMailContent = 10026; // group mail: today's letters used, empty text
+    // Impeaching the master: on cooldown, no grounds, requirements unmet, the master itself, cancel state, responded twice,
+    // in progress, not in progress.
+    public const int ImpeachCooldown = 472, ImpeachNoGrounds = 473, ImpeachRequirements = 474, ImpeachSelf = 475;
+    public const int ImpeachCancelState = 476, ImpeachRepeat = 477, ImpeachInProgress = 478, ImpeachNotInProgress = 479;
+    // Merging guilds (ErrorCodeConfig 10050-10078): expired, the other's received invitations full, ours sent full, too
+    // many members, invited already, bad announcement, no invitation, impeachment here / there, no merge possible,
+    // cooldown here / there.
+    public const int MergeExpired = 10050, MergeTheirInvitesFull = 10051, MergeOurInvitesFull = 10052, MergeTooMany = 10053;
+    public const int MergeRepeat = 10055, MergeAnnounce = 10056, MergeNoInvite = 10057, MergeOurImpeach = 10060;
+    public const int MergeImpossible = 10061, MergeOurCooldown = 10063, MergeTheirImpeach = 10075, MergeTheirCooldown = 10078;
     public const int GuildFundsShort = 484, GuildContributeShort = 10040, GuildBuildBusy = 485, GuildHallLow = 486, GuildBuildMax = 487;
     // Guild voice channels (ErrorCodeConfig 97001-97032, Localization_en): not in a guild, invalid channel, on the
     // channel's block list, already / not in the channel, not leader nor GuildVoice right, the leader cannot be kicked,
@@ -301,11 +323,16 @@ public static class ErrorCodes
     public const int NotForSale = 2303;         // "Item is not currently available for purchase"
     public const int PurchaseLimit = 2304;      // "Item purchase limit reached"
     public const int PurchaseRequirements = 2311; // "Purchase requirements not met"
+    public const int ShopGiftFriendsOnly = 2312;   // "Gifts can only be sent to friends"
+    public const int ShopGiftOrderMissing = 2314;  // "Order does not exist"
     public const int ShopAppearanceMissing = 2315; // "Appearance does not exist"
     public const int ShopAppearanceOwned = 2316;   // "Appearance already unlocked"
     public const int ShopGiftNotAllowed = 2317;    // "This shop does not allow gifts"
+    public const int ShopGiftDuplicate = 2318;     // "You already have an unclaimed gift containing the same appearance"
     public const int ShopMissing = 2323;        // "Shop Configuration not found."
     public const int ShopRewardMissing = 2324;  // "Reward Configuration not found."
+    public const int ShopGiftSelf = 2325;          // "You cannot send gifts to yourself"
+    public const int ShopGiftMessageLength = 2327;  // "Invalid gift message length"
 
     // Soul Echo (the client's name for emblems; exact operation mapping inferred).
     public const int FunctionLocked = 2057;       // "Function locked"
@@ -346,4 +373,14 @@ public static class ErrorCodes
     public const int LifeRecipe = 6610, LifeVigor = 6611, LifeWrongJob = 6613, LifeCollectionLocked = 6614;
     public const int LifeRequirements = 6618, LifeAlreadyLearned = 6619, LifeCollectionLearned = 6623;
     public const int LifeInvalidJob = 6624, LifeVigorOverflow = 6627;
+
+    // HTTP POST /gift-card/use/v2 (GiftCodeEndpoints). LC_RedemptionCodeManager's enum_GiftCardErrCode holds only the two
+    // success codes; any other `code` is a refusal and the client shows the response's `message` verbatim. The refusal
+    // values below are (inferred): the original server's codes are not in the client.
+    public const int GiftCardUseSuccess = 1959;     // enum_GiftCardErrCode.GiftCardUseSuccess
+    public const int GiftCardUseSuccessLeft = 1960; // enum_GiftCardErrCode.GiftCardUseSuccessLeft (never sent)
+    public const int GiftCardBadRequest = 1961, GiftCardBadCredentials = 1962, GiftCardRoleNotOwned = 1963;
+    public const int GiftCardUnknown = 1964, GiftCardDisabled = 1965, GiftCardNotStarted = 1966, GiftCardExpired = 1967;
+    public const int GiftCardExhausted = 1968, GiftCardAlreadyRedeemed = 1969, GiftCardInvalidItems = 1970;
+    public const int GiftCardRateLimited = 1971, GiftCardFailed = 1972;
 }

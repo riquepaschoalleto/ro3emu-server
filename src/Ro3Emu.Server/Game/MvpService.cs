@@ -75,6 +75,7 @@ public sealed partial class MvpService : IGameTicker
     }
 
     private readonly GameData _data;
+    private readonly TestingSwitches _testing;
     private readonly AccountStore _accounts;
     private readonly MonsterService _monsters;
     private readonly WorldData _worldData;
@@ -89,6 +90,10 @@ public sealed partial class MvpService : IGameTicker
     private readonly CombatService _combat;
     private readonly BuffService _buffs;
     private readonly Random _random = new();
+    private const int LordsMane = 1009015;
+
+    /// <summary>(inferred) Chance in percent that an MVP kill drops a Lord's Mane (ServerOptions.LordsManePercent).</summary>
+    internal int LordsManePercent { get; set; } = 10;
     private Dictionary<int, State>? _states;
     private readonly Dictionary<RuntimeMapKey, Dictionary<int, State>> _lineStates = new();
     private readonly Dictionary<int, long> _lastDeath = new();
@@ -127,8 +132,10 @@ public sealed partial class MvpService : IGameTicker
 
     public MvpService(GameData data, AccountStore accounts, MonsterService monsters, WorldData worldData, CharacterService character,
         RewardService rewards, TaskService tasks, TeamService teams, CombatService combat, BuffService buffs, SessionRegistry sessions,
-        World world, GameLoop loop, SceneService scene, PublicLineManager lines, ILogger<MvpService> log)
+        World world, GameLoop loop, SceneService scene, PublicLineManager lines, ILogger<MvpService> log,
+        TestingSwitches testing)
     {
+        this._testing = testing;
         this._buffs = buffs;
         this._data = data;
         this._accounts = accounts;
@@ -193,6 +200,8 @@ public sealed partial class MvpService : IGameTicker
             builder.Add(new MvpWritePlan(role, CounterRow(info)));
             await builder.CommitAsync(_accounts, "mvp/daily-counter-reset");
         }
+        // Testing UnlimitedRewards (TEST AID, not original): nothing is counted, so nothing shows as used.
+        if (_testing.UnlimitedRewards) info = new MVPPlayerInfo { PlayerId = role, LastTime = info.LastTime };
         await s.SendGameAsync(AwardNum, new MVPAwardNumRsp { Result = 0, Info = info });
     }
 
@@ -625,14 +634,18 @@ public sealed partial class MvpService : IGameTicker
         if (st.Retired) throw new OperationCanceledException("MVP line retired before lethal settlement.");
         online = online.Where(pair => pair.Value.Role?.Id == pair.Key && pair.Value.Progress != null
             && pair.Value.Attachment?.Cancelled != true).ToDictionary();
+        // Connect target 106012 asks for a party-mate among the participants (TaskService.Connect.cs).
         var taskPlans = online.ToDictionary(pair => pair.Key,
-            pair => _tasks.StageMvpParticipant(pair.Value, parentSource));
+            pair => _tasks.StageMvpParticipant(pair.Value, parentSource, st.Def.NpcId, st.Stats.TryGetValue(pair.Key, out var me)
+                && me.TeamId != 0 && st.Stats.Any(other => other.Key != pair.Key && other.Value.TeamId == me.TeamId)));
         var counters = new Dictionary<long, MVPPlayerInfo>();
         foreach (long player in online.Keys)
             counters[player] = (await LoadCountersAsync(player)).Info;
         // Counts before this kill decide the decay; offline participants have no loaded counters (inferred: not capped).
+        // Testing UnlimitedRewards (TEST AID, not original): no count is checked or spent, so nobody is capped.
+        bool unlimited = _testing.UnlimitedRewards;
         var teamsRanked = RankTeams(st.Stats.Select(kv => (kv.Key, kv.Value.TeamId, kv.Value.Leader, scores.GetValueOrDefault(kv.Key))),
-            id => counters.TryGetValue(id, out var c) && (c.TeamNum >= TeamCap || c.JoinNum >= JoinCap), capped => DecayPercent(_data, capped));
+            id => !unlimited && counters.TryGetValue(id, out var c) && (c.TeamNum >= TeamCap || c.JoinNum >= JoinCap), capped => DecayPercent(_data, capped));
 
         void Give(long player, MVP_AWARD_TYPE tp, long awardId)
         {
@@ -647,13 +660,16 @@ public sealed partial class MvpService : IGameTicker
                 _ => 0,
             };
             int cap = tp switch { MVP_AWARD_TYPE.First => FirstCap, MVP_AWARD_TYPE.End => EndCap, MVP_AWARD_TYPE.Team => TeamCap, MVP_AWARD_TYPE.Join => JoinCap, _ => int.MaxValue };
-            if (current >= cap) return; // 26051 "Today's Reward Count has been exhausted"
-            switch (tp)
+            if (current >= cap && !unlimited) return; // 26051 "Today's Reward Count has been exhausted"
+            if (!unlimited)
             {
-                case MVP_AWARD_TYPE.First: counter.FirstNum++; break;
-                case MVP_AWARD_TYPE.End: counter.EndNum++; break;
-                case MVP_AWARD_TYPE.Team: counter.TeamNum++; break;
-                case MVP_AWARD_TYPE.Join: counter.JoinNum++; break;
+                switch (tp)
+                {
+                    case MVP_AWARD_TYPE.First: counter.FirstNum++; break;
+                    case MVP_AWARD_TYPE.End: counter.EndNum++; break;
+                    case MVP_AWARD_TYPE.Team: counter.TeamNum++; break;
+                    case MVP_AWARD_TYPE.Join: counter.JoinNum++; break;
+                }
             }
             foreach (var (entry, count) in _rewards.RollAward(awardId, s))
                 awards.GetValueOrDefault(player)?.Add(new MVPPlayerAwardItem { ItemId = entry, Count = count, Tp = tp });
@@ -679,6 +695,20 @@ public sealed partial class MvpService : IGameTicker
                 break;
             }
             if (rarePlayer != 0) Give(rarePlayer, MVP_AWARD_TYPE.Probability, st.Def.Rare);
+        }
+        // Lord's Mane (1009015, "A mane dropped by the boss", the Starshatter Dragon's unseal material) has no source in
+        // the client data: one per kill at LordsManePercent, to a member picked as the rare winner is (inferred).
+        if (st.Stats.Count > 0 && _random.Next(100) < LordsManePercent)
+        {
+            var pool = teamsRanked.SelectMany((t, i) => t.Members.Select(id => (Id: id, Weight: Math.Max(1, teamsRanked.Count - i)))).ToList();
+            long roll = pool.Count == 0 ? 0 : _random.Next(pool.Sum(x => x.Weight));
+            foreach (var x in pool)
+            {
+                roll -= x.Weight;
+                if (roll >= 0) continue;
+                awards.GetValueOrDefault(x.Id)?.Add(new MVPPlayerAwardItem { ItemId = LordsMane, Count = 1, Tp = MVP_AWARD_TYPE.Probability });
+                break;
+            }
         }
         var nextDeaths = st.DeadMs.Append(deadMs).TakeLast(20).ToArray();
         var builder = new RoleItemPlanBuilder(_accounts);

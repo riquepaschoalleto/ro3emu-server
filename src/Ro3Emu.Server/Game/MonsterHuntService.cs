@@ -54,7 +54,7 @@ public sealed class MonsterHuntService
         foreach (var monster in Rows("AreaConcurMonsterConfig"))
             _monsterByMapNpc.TryAdd((GameData.Int(monster, "_iMap"), (int)GameData.Int(monster, "_iNpc")), monster);
         rewards.StageHuntKill = StageKill;
-        rewards.ExtraKillDrops = AreaDrops;
+        rewards.ExtraKillDrops.Add(AreaDrops);
         rewards.KillDropsGranted.Add(KilledAsync);
     }
 
@@ -230,6 +230,7 @@ public sealed class MonsterHuntService
             await s.SendGameAsync(GainAreaAward, new AreaConcurGainAreaAwardResp { Req = req });
         }
         await SyncAsync(s);
+        await _tasks.RefreshAsync(s); // 318002: the claimed area stages
     }
 
     /// <summary>The stages' awards and the claimed markers in one owned-award receipt; on any failure nothing changed.</summary>

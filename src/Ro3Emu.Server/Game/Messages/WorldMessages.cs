@@ -32,6 +32,14 @@ public sealed class WorldMessages(Maps.World world, CombatService combat, SceneS
         routes.Intercept("territory/battle", DungeonStatistics, territory.SharedAsync);
         routes.Intercept("escort/actors", id => id is 32287 || NpcInteraction(id), escort.HandleSharedAsync); // guild goods, cargo NPCs
         routes.Intercept("territory/world", NpcInteraction, territory.WorldSharedAsync);
+        // A siege cannon is an NPC of the siege room; its operator's buttons are 32703.
+        routes.Intercept("territory/cannon", id => NpcInteraction(id) || id == WorldInteractionService.Action,
+            territory.CannonSharedAsync);
+        // So are the siege's bag NPCs, which open the war bag.
+        routes.Intercept("territory/siege-bag", NpcInteraction, territory.SiegeBagSharedAsync);
+        // A war vehicle is an NPC of the siege room too; its riders' buttons, seat changes and facing follow it.
+        routes.Intercept("territory/vehicle", id => NpcInteraction(id) || id is WorldInteractionService.Action
+            or WorldInteractionService.SeatChange or WorldInteractionService.VehicleSync, territory.VehicleSharedAsync);
 
         routes.Map(1031, "common", async (session, msgId, body) =>
         {
@@ -133,6 +141,10 @@ public sealed class WorldMessages(Maps.World world, CombatService combat, SceneS
             if (!await training.TryEnterAsync(session, dungeonRequest) && !await festival.TryEnterAsync(session, dungeonRequest) && !await timedBattles.TryEnterOnePieceAsync(session, dungeonRequest) && !await guildHome.TryEnterViaDungeonAsync(session, dungeonRequest)
                 && !await dracula.TryEnterAsync(session, dungeonRequest))
                 await dungeons.EnterAsync(session, dungeonRequest);
+        });
+        routes.Map(DraculaWeddingService.Watch, "territory", async (session, msgId, body) =>
+        {
+            await dracula.WatchAsync(session, DungeonWatchChangeTargetReq.Parser.ParseFrom(body.Span));
         });
         routes.Map(TowerService.LeaveDungeon, "territory", async (session, msgId, body) =>
         {

@@ -211,6 +211,8 @@ public sealed partial class GuildService(GameData data, GuildStore store, RoleSt
             MaxCreateHelperNum = Setting("GuildResponsePeopleLimit", 3)[0],
             JoinLevelLimit = g.JoinLevelLimit, LastChangeNameTime = g.LastChangeNameTime,
             LastChangeNoticeTime = (int)g.LastChangeNoticeTime, IsJoin = isJoin, ActivityInfo = ActivityInfo(g),
+            NextBroadEmailTime = g.NextBroadEmailMs, BroadEmailLimit = BroadEmailsToday(g), PeachInfo = PeachInfo(g),
+            PendingMergeGuildId = g.PendingMergeGuildId,
         };
         full.HistoryNames.AddRange(g.HistoryNames.Count > 0 ? g.HistoryNames : [g.Name]);
         full.MemberInfo.AddRange(g.Members.Values.Select(m => MemberInfo(m)));
@@ -238,11 +240,12 @@ public sealed partial class GuildService(GameData data, GuildStore store, RoleSt
         PlayerID = a.RoleId, Name = a.Name, Level = a.Level, Career = a.Career, ApplyTime = a.ApplyTime,
     };
 
-    private Task SendFull(GameSession s, GuildStore.State g, bool joined)
+    private async Task SendFull(GameSession s, GuildStore.State g, bool joined)
     {
         var full = FullInfo(g, joined);
         full.IsLeagueElite = s.Role != null && IsLeagueElite(g, s.Role.Id);
-        return s.SendGameAsync(Full, full);
+        await s.SendGameAsync(Full, full);
+        await SendWartimeAsync(s, g);
     }
 
     /// <summary>Publish committed caravan funds/contribution from a freshly loaded guild aggregate.</summary>
@@ -307,6 +310,7 @@ public sealed partial class GuildService(GameData data, GuildStore store, RoleSt
         clear.HistoryNames.AddRange(former.HistoryNames.Count > 0 ? former.HistoryNames : [former.Name]);
         clear.Building.AddRange(former.Buildings.Select(k => BuildingInfo(former, k.Key)));
         await s.SendGameAsync(Full, clear);
+        await ClearWartimeAsync(s);
     }
 
     private int CheckName(string name, long except = 0)
@@ -664,6 +668,7 @@ public sealed partial class GuildService(GameData data, GuildStore store, RoleSt
             if (next == 1)
             {
                 if (actor.Official != 1 || target.RoleId == actor.RoleId) code = ErrorCodes.GuildPermission;
+                else if (Impeaching(g)) code = ErrorCodes.ImpeachInProgress;
                 else { actor.Official = 20; target.Official = 1; }
             }
             else if (target.Official == 1 || (actor.Official != 1 && next <= actor.Official)) code = ErrorCodes.GuildPermission;
@@ -701,12 +706,18 @@ public sealed partial class GuildService(GameData data, GuildStore store, RoleSt
             var member = g.Members[s.Role!.Id];
             g.Members.Remove(member.RoleId);
             bool elite = DropElite(g, member.RoleId);
+            var machines = DropWartime(g, member.RoleId);
+            bool returned = await TakeMachinesAsync(g, member.RoleId);
+            var impeach = DropImpeacher(g, [member]);
             if (g.Members.Count == 0) await DeleteGuildAsync(g, [member.RoleId]);
             else
             {
                 Journal(g, EvLeft, [member.RoleId], Str(member.Name));
                 await SaveGuildAsync(g, [member.RoleId]);
                 if (elite) await PushElitesAsync(g, LeagueElites(g).Values.ToHashSet());
+                await PushToolChangesAsync(g, machines);
+                if (returned) await PushStoreAsync(g);
+                if (impeach != null) await impeach();
             }
             await s.SendGameAsync(Leave, new GuildMemberLeaveResp { Result = 0 });
             await PushMember(g, member, GuildMemberInfoChangeNtf.Types.ChangeType.Leave);
@@ -725,6 +736,9 @@ public sealed partial class GuildService(GameData data, GuildStore store, RoleSt
         var removed = new List<GuildStore.Member>();
         var targetViews = new List<(GuildStore.Member Member, GameSession? Session, DBRoleGuildInfo Personal)>();
         bool eliteDropped = false;
+        var machines = new List<(WartimeToolType Type, int Index)>();
+        bool returned = false;
+        Func<Task>? impeach = null;
         if (code == 0 && g != null)
         {
             foreach (long id in req.TarPlayerIDs.Distinct())
@@ -749,8 +763,11 @@ public sealed partial class GuildService(GameData data, GuildStore store, RoleSt
                 {
                     g.Members.Remove(m.RoleId);
                     eliteDropped |= DropElite(g, m.RoleId);
+                    machines.AddRange(DropWartime(g, m.RoleId));
+                    returned |= ReturnPrepay(g, m.RoleId);
                     Journal(g, EvKicked, [kicker.RoleId, m.RoleId], Str(kicker.Name), Str(m.Name));
                 }
+                impeach = DropImpeacher(g, removed);
                 // The roster index and every personal view share a single commit. No session or chat state
                 // changes until the transaction succeeds, so a failed later role write rolls all removals back.
                 var transaction = roles.NewTransaction();
@@ -780,6 +797,16 @@ public sealed partial class GuildService(GameData data, GuildStore store, RoleSt
                 }
             }
         if (code == 0 && g != null && eliteDropped) await PushElitesAsync(g, LeagueElites(g).Values.ToHashSet());
+        if (code == 0 && g != null) await PushToolChangesAsync(g, machines);
+        if (code == 0 && g != null)
+        {
+            // Their war machines go only once the kick is committed.
+            bool restocked = false;
+            foreach (var m in removed) restocked |= await TakeMachinesAsync(g, m.RoleId);
+            if (restocked) { await SaveGuildAsync(g); returned = true; }
+        }
+        if (code == 0 && g != null && returned) await PushStoreAsync(g);
+        if (impeach != null) await impeach();
         await s.SendGameAsync(Kick, resp);
     }
 
@@ -920,18 +947,7 @@ public sealed partial class GuildService(GameData data, GuildStore store, RoleSt
                 await RefreshMembers(g);
                 if (tp is 1 or 2 or 5 or 10)
                 {
-                    var change = new GuildBaseInfoChangeNtf
-                    {
-                        Tp = GuildBaseInfoChangeNtf.Types.ChangeType.ChangeBase,
-                        Base = new GuildBaseInfoChangeNtf.Types.BaseChangeInfo
-                        {
-                            Name = g.Name, Level = g.Level,
-                            Announce = g.Announce, Notice = g.Notice, Status = (GuildStatus)g.Status,
-                            MaxMemberCount = MaxMembers(g), LastChangeNameTime = g.LastChangeNameTime,
-                            LastChangeNoticeTime = (int)g.LastChangeNoticeTime
-                        }
-                    };
-                    change.Base.HistoryNames.AddRange(g.HistoryNames.Count > 0 ? g.HistoryNames : [g.Name]);
+                    var change = BaseChangeOf(g);
                     foreach (var m in g.Members.Values) if (Online(m.RoleId) is { } peer) await peer.SendGameAsync(BaseChange, change);
                 }
                 if (tp == 10)
@@ -1081,6 +1097,8 @@ public sealed partial class GuildService(GameData data, GuildStore store, RoleSt
     {
         await ExpireApplicationsAsync();
         await ExpireHelpersAsync();
+        await ExpireImpeachmentsAsync();
+        await RunMergesAsync();
         long now = NowMs();
         foreach (var g in store.List().Where(g => g.BuildingEndTimes.Values.Any(end => end > 0 && end <= now)))
         {

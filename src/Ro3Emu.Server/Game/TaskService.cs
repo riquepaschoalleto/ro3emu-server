@@ -101,6 +101,8 @@ public sealed partial class TaskService
         cards.RequiredCollectionRefresh = RefreshCollectionRequiredAsync;
         character.GetKillTaskParticipantKeys = GetKillTaskParticipantKeys;
         character.StageKillTaskObligations = StageKillTaskObligations;
+        ExtraTasks.Add(DungeonRunTasks); // TaskService.DungeonTasks.cs
+        QuestDelivered.Add(AddFactionPoints); // 101022 (TaskService.MiscTargets.cs)
     }
 
     /// <summary>Delivered = completeTaskNum &gt; 0 or status 4 (the client's CheckTaskDeliveryed). Without quest state: true.</summary>
@@ -437,11 +439,11 @@ public sealed partial class TaskService
     /// Adds progress from an event to every running task's matching targets: <paramref name="amount"/> returns how much a
     /// target gains (long.MaxValue = complete it); <paramref name="type"/> limits it to one target type.
     /// </summary>
-    private async Task ProgressAsync(GameSession session, int? type, Func<long[], long> amount)
+    private async Task ProgressAsync(GameSession session, int? type, Func<long[], long> amount, Func<TaskDef, bool>? eligible = null)
     {
         using var gate = await LockTasksAsync(session);
         if (BeforeProgress is { } before) await before(session);
-        await ProgressCoreAsync(session, type, amount);
+        await ProgressCoreAsync(session, type, amount, eligible);
     }
 
     private async Task ProgressCoreAsync(GameSession session, int? type, Func<long[], long> amount, Func<TaskDef, bool>? eligible = null)
@@ -503,6 +505,7 @@ public sealed partial class TaskService
         var context = RequireTaskOwner(session);
         bool debtIncomplete = false;
         bool requiredFollowup = _roles.HasTaskFollowup(session.Role!.Id);
+        var chickenFinished = new List<long>();
         for (int round = 0; round < 64; round++)
         {
             bool moved = false, storageFailed = false;
@@ -516,7 +519,12 @@ public sealed partial class TaskService
                     if (info.Status == Finished) { info.Status = Running; moved = true; }
                     continue;
                 }
-                if (info.Status != Finished) { info.Status = Finished; moved = true; }
+                if (info.Status != Finished)
+                {
+                    info.Status = Finished;
+                    moved = true;
+                    if (def.Type == ChickenTaskType) chickenFinished.Add(def.Id);
+                }
                 if (def.Deliver == ReceiveAuto)
                 {
                     int result = await DeliverCoreAsync(session, context, def.Id);
@@ -541,6 +549,7 @@ public sealed partial class TaskService
         // can still be present on a reused GameSession, so readiness is bound to this attachment.
         bool cardSourceReady = ReferenceEquals(session.CardLibraryReadyAttachment, session.Attachment);
         await FlushAsync(session, !debtIncomplete && (!requiredFollowup || cardSourceReady));
+        await NotifyChickenFinishedAsync(session, chickenFinished.Where(id => session.Tasks.Infos.GetValueOrDefault(id)?.Status == Finished));
     }
 
     private async Task FlushAsync(GameSession session, bool settled = false)
@@ -567,7 +576,8 @@ public sealed partial class TaskService
         var daily = PrepareDailyDelivery?.Invoke(session, id);
         if (IsDelivered(session, id) && daily?.MirrorChanged != true) return ErrorCodes.TaskStatus;
         var def = Defs()[id];
-        if (!TryDeliveryActions(session, context, def, out var costs, out bool cutScene, out int? questMount)) return ErrorCodes.TaskRequirements;
+        if (!TryDeliveryActions(session, context, def, out var costs, out bool cutScene, out int? questMount, out var guildActivities))
+            return ErrorCodes.TaskRequirements;
         foreach (var target in def.Targets.Where(t => t[0] == TSubmit))
         {
             if (!Supported(target) || target[2] > int.MaxValue) return ErrorCodes.TaskRequirements;
@@ -586,7 +596,7 @@ public sealed partial class TaskService
             // 5021 is the authoritative season snapshot sent to this session, also used by client previews.
             int? playBook = session.Synced.GetValueOrDefault(SeasonService.SeasonSync) is DBSeasonInfo { Current: { } current }
                 ? (int)current.PlayBookId : null;
-            var plan = _awards.Resolve(session, def.Award, playBook);
+            var plan = _awards.ResolveTask(session, def.Award, playBook);
             var runtime = new TaskRuntimeState { CompletedGuides = session.TaskRuntime.CompletedGuides.ToHashSet(), InCutScene = session.InCutScene || cutScene };
             string awardSource = $"task/{session.Role!.Id}/{id}/{next.CompleteTaskNum[id]}/" +
                 $"{session.Daily?.DailyEpoch ?? 0}/{session.Daily?.WeeklyEpoch ?? 0}";
@@ -604,7 +614,7 @@ public sealed partial class TaskService
         }
         catch (AwardResolutionException e)
         {
-            _log.LogWarning("Task {Task} reward held: {Reason}", id, e.Message);
+            LogHeldOnce(session, id, "reward held: " + e.Message);
             return ErrorCodes.TaskRequirements;
         }
         catch (Exception e) when (daily != null || _roles.HasTaskFollowup(session.Role!.Id))
@@ -616,6 +626,8 @@ public sealed partial class TaskService
         if (daily?.MirrorChanged == true && SyncDailyDelivery is { } sync) await sync(session);
         if (cutScene) session.InCutScene = true;
         if (deliveredPlan != null) foreach (var handler in QuestDelivered) handler(session, id, deliveredPlan);
+        foreach (long activity in guildActivities)
+            foreach (var handler in GuildActivityJoined) handler(session, activity);
         _log.LogInformation("{Name} delivers task {Task} {TaskName}: exp {Exp}", session.Role?.Name, id,
             _data.TextOf(_data.Row("TaskConfig", id)!.Value, "_iName"), def.Exp);
         return 0;
@@ -643,7 +655,8 @@ public sealed partial class TaskService
                 accepted++;
             }
         }
-        return accepted + AcceptGrowthTitle(session) + AcceptGrowthClass(session) + AcceptActivityTasks(session);
+        return accepted + AcceptGrowthTitle(session) + AcceptGrowthClass(session) + AcceptActivityTasks(session)
+            + AcceptChickenTasks(session) + AcceptRootTasks(session) + AcceptMiscTasks(session);
     }
 
     private bool Ready(GameSession session, TaskDef def) =>
@@ -654,6 +667,7 @@ public sealed partial class TaskService
     {
         session.Tasks!.Infos[id] = NewInfo(id, Running);
         StartLoginTargets(session, id);
+        StartMiscTargets(session, id);
         // Same current-step selection as LC_TaskHelper.DealAcception (inferred for server host).
         // Extra slots are retained, never treated as sequential instructions.
         EvaluatePassive(session);
@@ -661,7 +675,9 @@ public sealed partial class TaskService
         var info = session.Tasks.Infos[id];
         int step = Enumerable.Range(0, def.Targets.Length).FirstOrDefault(i => info.CompleteNum[i] != Required(session, def.Targets[i]), -1);
         if (step >= 0 && step < def.AcceptActions.Length && ServerOpcode(def.AcceptActions[step]) == 621) session.InCutScene = true;
-        _log.LogInformation("{Name} accepts task {Task} {TaskName}", session.Role?.Name, id, _data.TextOf(_data.Row("TaskConfig", id)!.Value, "_iName"));
+        // The 53 hidden Connect quests start together at login; at Information they would fill a /bug report's context.
+        _log.Log(def.Type == ConnectTaskType ? LogLevel.Debug : LogLevel.Information, "{Name} accepts task {Task} {TaskName}",
+            session.Role?.Name, id, _data.TextOf(_data.Row("TaskConfig", id)!.Value, "_iName"));
     }
 
     private TaskInfo NewInfo(long id, TaskState status)
