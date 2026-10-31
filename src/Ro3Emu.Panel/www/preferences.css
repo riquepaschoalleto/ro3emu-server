@@ -1,5 +1,5 @@
-/* Player/admin-wide appearance and header preference controls. */
-.display-controls{display:flex;align-items:center;gap:8px;margin-left:auto;flex:none}
+/* Player/admin-wide appearance and footer preference controls. */
+.display-controls{display:flex;align-items:center;gap:8px;flex:none;flex-wrap:wrap}
 .pref-language,.pref-theme{height:32px;border:1px solid var(--line-strong);border-radius:var(--r2);
   background:var(--surface);color:var(--ink);font:700 var(--t-sm)/1 var(--body);padding:0 9px}
 .pref-language{max-width:137px;cursor:pointer}
@@ -35,11 +35,6 @@
 :root[data-theme="dark"] .rank.r2{background:#394669}
 :root[data-theme="dark"] .skip{background:#394669;color:#fff}
 :root[data-theme="dark"] .toast{background:#394669;color:#fff}
-@media(max-width:1150px){
-  .top .wrap{gap:8px}
-  .display-controls{margin-left:auto}
-  .top .menu-btn{margin-left:0}
-}
 @media(max-width:410px){
   .pref-language{max-width:95px;font-size:12px;padding:0 4px}
   .pref-theme{min-width:54px;padding:0 4px;font-size:12px}
@@ -50,29 +45,23 @@
 :root[data-theme="dark"] .btn.danger:not(:disabled):hover{background:#bf4666}
 :root[data-theme="dark"] .chip.maintenance{background:#394669;color:#fff}
 
-/* Header layout: the original 1200px content cap cannot accommodate eight
-   navigation links, both preference controls and the authenticated account.
-   Keep all navigation links visible in a second row on medium desktops. */
-@media (min-width:1151px){
-  .top .wrap{max-width:none;padding-inline:clamp(16px,2vw,40px)}
+/* Footer controls are separate from the original logo and explanatory text.
+   Grid prevents the three areas from overlapping while keeping the existing
+   header navigation and original header breakpoints untouched. */
+.foot .wrap{
+  display:grid;
+  grid-template-columns:max-content minmax(0,1fr) max-content;
+  align-items:center;
+  gap:var(--s2) var(--s5);
 }
-@media (min-width:1151px) and (max-width:1599px){
-  .top{height:96px}
-  .top .wrap{
-    flex-wrap:wrap;
-    align-content:center;
-    align-items:center;
-    column-gap:12px;
-    row-gap:4px;
-  }
-  .top .brand{order:0;margin-right:auto}
-  .top .display-controls{order:1;margin-left:0}
-  .top .auth{order:2;margin-left:0}
-  .top .nav{
-    order:3;
-    flex:0 0 100%;
-    height:36px;
-    justify-content:center;
-  }
-  .top .nav-links{justify-content:center;flex-wrap:nowrap}
+.foot #foot-text{min-width:0;text-align:center;overflow-wrap:anywhere}
+.foot .display-controls{
+  margin:0;
+  justify-self:end;
+  justify-content:flex-end;
+}
+@media(max-width:1000px){
+  .foot .wrap{grid-template-columns:minmax(0,1fr);justify-items:start}
+  .foot #foot-text{text-align:left}
+  .foot .display-controls{justify-self:start;justify-content:flex-start}
 }
