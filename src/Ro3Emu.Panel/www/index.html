@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,6 +12,9 @@
 <link rel="stylesheet" href="/app.css">
 <link rel="stylesheet" href="/pages/admin-tools.css">
 <link rel="stylesheet" href="/pages/database.css">
+<link rel="stylesheet" href="/preferences.css">
+<script src="/locale-ptbr.js" defer></script>
+<script src="/preferences.js" defer></script>
 <script src="/app.js" defer></script>
 <!-- Admin pages, each in its own file; they register with app.js before the first route. -->
 <script src="/pages/admin-tools.js" defer></script>
@@ -88,6 +91,13 @@
       </div>
       <div class="menu-auth" id="menu-auth"></div>
     </nav>
+    <div class="display-controls" role="group" aria-label="Display preferences">
+      <select class="pref-language" id="panel-language" aria-label="Panel language" title="Panel language">
+        <option value="pt-BR">Português (BR)</option>
+        <option value="en">English</option>
+      </select>
+      <button class="pref-theme" id="panel-theme" type="button" aria-label="Dark theme" aria-pressed="false">☾ Escuro</button>
+    </div>
     <div class="auth" id="auth"></div>
     <button type="button" class="icon-btn menu-btn" id="menu" aria-label="Menu" aria-expanded="false" aria-controls="nav"><svg class="i"><use href="#i-menu"/></svg></button>
   </div>
