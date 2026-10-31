@@ -35,7 +35,7 @@
 :root[data-theme="dark"] .rank.r2{background:#394669}
 :root[data-theme="dark"] .skip{background:#394669;color:#fff}
 :root[data-theme="dark"] .toast{background:#394669;color:#fff}
-@media(max-width:860px){
+@media(max-width:1150px){
   .top .wrap{gap:8px}
   .display-controls{margin-left:auto}
   .top .menu-btn{margin-left:0}
@@ -44,3 +44,8 @@
   .pref-language{max-width:95px;font-size:12px;padding:0 4px}
   .pref-theme{min-width:54px;padding:0 4px;font-size:12px}
 }
+
+:root[data-theme="dark"] .btn.primary:not(:disabled):hover{background:#455b9c}
+:root[data-theme="dark"] .btn.danger{background:#ae3655;color:#fff}
+:root[data-theme="dark"] .btn.danger:not(:disabled):hover{background:#bf4666}
+:root[data-theme="dark"] .chip.maintenance{background:#394669;color:#fff}
