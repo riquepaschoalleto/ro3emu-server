@@ -71,3 +71,20 @@ Nas proximas execucoes, basta iniciar o script PowerShell. O script nao baixa no
 - Conferir log de inicio e SHA do codigo compilado antes de declarar correcao.
 
 Nao considerar nenhum item acima validado apenas pela sincronizacao no GitHub.
+
+## PT-BR e tema claro/escuro — implementação de 31/10/2026
+
+**Estado:** recursos publicados na branch de desenvolvimento, ainda não compilados nem validados no Windows do usuário.
+
+- `www/locale-ptbr.js`: catálogo de 448 entradas PT-BR separado dos textos originais do upstream em inglês.
+- `www/preferences.js`: português brasileiro como padrão, English como opção, preferências `ro3p-language` e `ro3p-theme` salvas no navegador e tradução de textos, placeholders, títulos e rótulos de acessibilidade.
+- `www/preferences.css`: tema escuro, cores e contraste em cartões, campos, botões e navegação. Tema claro original preservado.
+- `www/index.html`: seletor de idioma e botão Claro/Escuro no canto superior direito.
+- `www/app.css`: barra superior responsiva ao espaço dos novos controles.
+- `www/app.js`: formatação de números pelo idioma escolhido.
+- Conteúdo arbitrário do jogo/servidor e frases novas do upstream podem continuar em inglês; verificar visualmente e complementar o catálogo conforme necessário.
+- Nenhuma alteração em banco, personagens, jogo, APIs ou lógica do servidor.
+
+**Validação ainda pendente:** parar apenas a sessão de TESTE atual, atualizar `dev/ro3-stabilization` localmente, executar `scripts/INICIAR_RO3_TESTE_WEB.ps1` conforme instruções acima, recompilar e acessar `http://127.0.0.1:5391`. Testar menus públicos e nove áreas GM, tradução, campos dinâmicos, alternância claro/escuro, preferências após F5 e layout móvel. Não substituir a instalação principal.
+
+**Evidência já obtida:** arquivos presentes no GitHub, dependências conectadas e sintaxe dos JavaScript alterados verificada. Build .NET e validação visual ainda não realizados.
