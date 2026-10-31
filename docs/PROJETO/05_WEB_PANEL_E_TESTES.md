@@ -88,3 +88,11 @@ Nao considerar nenhum item acima validado apenas pela sincronizacao no GitHub.
 **Validação ainda pendente:** parar apenas a sessão de TESTE atual, atualizar `dev/ro3-stabilization` localmente, executar `scripts/INICIAR_RO3_TESTE_WEB.ps1` conforme instruções acima, recompilar e acessar `http://127.0.0.1:5391`. Testar menus públicos e nove áreas GM, tradução, campos dinâmicos, alternância claro/escuro, preferências após F5 e layout móvel. Não substituir a instalação principal.
 
 **Evidência já obtida:** arquivos presentes no GitHub, dependências conectadas e sintaxe dos JavaScript alterados verificada. Build .NET e validação visual ainda não realizados.
+
+### Ajuste de cabeçalho responsivo — 31/10/2026
+
+- Relato visual do usuário: seletores de idioma e tema sobrepunham os links do menu, escondendo Mapas/Admin na barra superior.
+- Causa identificada no CSS: o cabeçalho estava limitado a 1200 px de conteúdo útil, porém mantinha oito links, as preferências e a conta na mesma linha, sem espaço suficiente.
+- Correção publicada em `src/Ro3Emu.Panel/www/preferences.css`: cabeçalho com largura disponível em desktop; entre 1151 e 1599 px as preferências e a conta passam à primeira linha e **todos os links do menu ficam visíveis na segunda**; em telas até 1150 px mantém-se o menu móvel recolhível.
+- O ajuste foi checado com teste geométrico de layout em navegador Chromium num protótipo de cabeçalho nas larguras 1151, 1302, 1536, 1600 e 1920 px, sem sobreposição. **Ainda requer atualização local do script e confirmação no painel real**, pois o teste visual não ocorreu na instância do Windows do usuário.
+- O painel rodando no Windows só terá a correção após nova execução da compilação de TESTE; não basta atualizar a página do build antigo. Preservar a instalação principal.
