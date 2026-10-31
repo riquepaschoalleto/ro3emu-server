@@ -96,3 +96,13 @@ Nao considerar nenhum item acima validado apenas pela sincronizacao no GitHub.
 - Correção publicada em `src/Ro3Emu.Panel/www/preferences.css`: cabeçalho com largura disponível em desktop; entre 1151 e 1599 px as preferências e a conta passam à primeira linha e **todos os links do menu ficam visíveis na segunda**; em telas até 1150 px mantém-se o menu móvel recolhível.
 - O ajuste foi checado com teste geométrico de layout em navegador Chromium num protótipo de cabeçalho nas larguras 1151, 1302, 1536, 1600 e 1920 px, sem sobreposição. **Ainda requer atualização local do script e confirmação no painel real**, pois o teste visual não ocorreu na instância do Windows do usuário.
 - O painel rodando no Windows só terá a correção após nova execução da compilação de TESTE; não basta atualizar a página do build antigo. Preservar a instalação principal.
+
+### Correção definitiva: preferências no rodapé — 31/10/2026
+
+- Pedido do usuário: restaurar exatamente a geometria e o posicionamento originais do menu superior e transferir Idioma e Tema para o rodapé, sem encobrir logotipo ou aviso.
+- `src/Ro3Emu.Panel/www/index.html`: o bloco `display-controls` foi movido do header para o footer, depois de `foot-text`; o logotipo e o aviso existentes permanecem inalterados.
+- `src/Ro3Emu.Panel/www/app.css`: breakpoints originais do menu restaurados (860/861 px).
+- `src/Ro3Emu.Panel/www/preferences.css`: retiradas as regras que alteravam o cabeçalho; o rodapé usa três colunas em telas largas e empilha os elementos abaixo de 1001 px.
+- `src/Ro3Emu.Panel/www/preferences.js` não foi modificado; controles mantêm os IDs originais e as preferências salvas.
+- Verificação estática após publicação: oito links da navegação mantidos, controles exclusivamente no rodapé, breakpoints originais restaurados e nenhuma regra extra de geometria do header em `preferences.css`.
+- **Pendente:** atualizar e executar a compilação na instalação de TESTE do Windows e conferir o resultado visual. A instalação principal não foi modificada.
