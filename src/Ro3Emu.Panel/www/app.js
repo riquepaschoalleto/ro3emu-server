@@ -53,8 +53,7 @@ function toast(text) {
 
 // ---------------------------------------------------------------- formatting
 
-const numberFormat = new Intl.NumberFormat('en-US');
-const num = n => numberFormat.format(n ?? 0);
+const num = n => new Intl.NumberFormat(document.documentElement.lang === 'pt-BR' ? 'pt-BR' : 'en-US').format(n ?? 0);
 const pad = n => String(n).padStart(2, '0');
 
 /** A technical timestamp in local time, 2026-10-30 12:22; the full ISO time in its tooltip. */
