@@ -49,3 +49,30 @@
 :root[data-theme="dark"] .btn.danger{background:#ae3655;color:#fff}
 :root[data-theme="dark"] .btn.danger:not(:disabled):hover{background:#bf4666}
 :root[data-theme="dark"] .chip.maintenance{background:#394669;color:#fff}
+
+/* Header layout: the original 1200px content cap cannot accommodate eight
+   navigation links, both preference controls and the authenticated account.
+   Keep all navigation links visible in a second row on medium desktops. */
+@media (min-width:1151px){
+  .top .wrap{max-width:none;padding-inline:clamp(16px,2vw,40px)}
+}
+@media (min-width:1151px) and (max-width:1599px){
+  .top{height:96px}
+  .top .wrap{
+    flex-wrap:wrap;
+    align-content:center;
+    align-items:center;
+    column-gap:12px;
+    row-gap:4px;
+  }
+  .top .brand{order:0;margin-right:auto}
+  .top .display-controls{order:1;margin-left:0}
+  .top .auth{order:2;margin-left:0}
+  .top .nav{
+    order:3;
+    flex:0 0 100%;
+    height:36px;
+    justify-content:center;
+  }
+  .top .nav-links{justify-content:center;flex-wrap:nowrap}
+}
