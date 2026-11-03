@@ -12,8 +12,8 @@ namespace Ro3Emu.Panel;
 /// <summary>
 /// The web control panel (docs/guide/panel.md): the static site and its JSON API, on the panel's own port. Requests
 /// that arrive on that port never reach the server's other endpoints, and the server's endpoints are not served here.
-/// Public pages, a player area behind a login with the game account, and an admin area for the accounts listed in
-/// Ro3Emu:GmAccounts. Every change goes through <see cref="IPanelBackend"/>.
+/// Public pages, a player area behind a login with the game account, and an admin area for the staff roles
+/// (Moderator, GM, Admin: <see cref="IPanelOperations.RoleOf"/>). Every change goes through <see cref="IPanelBackend"/>.
 /// </summary>
 public sealed partial class PanelSite
 {
@@ -22,7 +22,8 @@ public sealed partial class PanelSite
     private const int MaxBody = 16 * 1024;
     /// <summary>The site's own pages: the first path segment of every route app.js draws.</summary>
     private static readonly HashSet<string> Pages = new(StringComparer.Ordinal)
-    { "", "online", "rankings", "news", "login", "register", "account", "admin", "items", "monsters", "maps", "characters" };
+    { "", "online", "rankings", "news", "login", "register", "account", "admin", "items", "monsters", "maps", "characters",
+        "database", "cards", "crafting", "classes", "skills", "pets", "mounts", "shops", "elements", "events", "mvps", "profiles", "guilds", "territory", "market" };
 
     /// <summary>
     /// No inline script or style anywhere, so the policy allows only the site's own files. frame-ancestors and the
@@ -36,23 +37,32 @@ public sealed partial class PanelSite
     private readonly PanelOptions _options;
     private readonly IPanelBackend _backend;
     private readonly IPanelAdminTools _tools;
+    private readonly IPanelOperations _ops;
+    private readonly IPanelUpdates _updates;
     private readonly TimeProvider _clock;
     private readonly ILogger<PanelSite> _log;
     private readonly PanelSessions _sessions;
+    private readonly PanelSignUps _signUps;
     private readonly PanelAssets _assets = new();
-    private readonly IPAddress[] _proxies;
+    private readonly ClientAddresses _clients;
     private readonly Route[] _routes;
 
-    public PanelSite(PanelOptions options, IPanelBackend backend, IPanelAdminTools tools, TimeProvider clock, ILogger<PanelSite> log)
+    public PanelSite(PanelOptions options, IPanelBackend backend, IPanelAdminTools tools, IPanelOperations ops, IPanelUpdates updates,
+        TimeProvider clock, ILogger<PanelSite> log)
     {
         _options = options;
         _backend = backend;
         _tools = tools;
+        _ops = ops;
+        _updates = updates;
         _clock = clock;
         _log = log;
         _sessions = new PanelSessions(clock, TimeSpan.FromHours(Math.Max(1, options.SessionHours)));
-        _proxies = [.. options.TrustedProxies.Select(IPAddress.Parse).Select(Normalize)];
-        _routes = [.. PublicRoutes(), .. PlayerRoutes(), .. AdminRoutes(), .. ToolRoutes(), .. DatabaseRoutes(), .. CharacterRoutes()];
+        _signUps = new PanelSignUps(options, clock);
+        _clients = new ClientAddresses(options.TrustedProxies);
+        _routes = [.. PublicRoutes(), .. PlayerRoutes(), .. AdminRoutes(), .. ToolRoutes(), .. DatabaseRoutes(), .. CharacterRoutes(),
+            .. SecurityRoutes(), .. StaffRoutes(), .. ReportRoutes(), .. CharacterActionRoutes(), .. ServerRoutes(), .. UpdateRoutes(), .. PlayerPageRoutes(), .. WikiRoutes(),
+            .. SuspicionRoutes()];
     }
 
     /// <summary>
@@ -131,7 +141,7 @@ public sealed partial class PanelSite
     private const string ImagePrefix = "/img/";
 
     /// <summary>The picture folders the data export writes (DataExport IconExport) and the names it gives the files.</summary>
-    [GeneratedRegex(@"^/img/(items|monsters|classes|maps|skills)/[A-Za-z0-9_\-]+\.png$")]
+    [GeneratedRegex(@"^/img/(items|monsters|classes|maps|skills|pets|npcs|mounts|events|guilds|titles|achievements)/[A-Za-z0-9_\-]+\.png$")]
     private static partial Regex ImagePath();
 
     /// <summary>
@@ -165,7 +175,9 @@ public sealed partial class PanelSite
 
     // ---------------------------------------------------------------- the API
 
-    private enum Access { Public, Player, Admin }
+    /// <summary>Who may call a route: anyone, a signed-in player, or a staff role and the roles above it. Admin is the
+    /// Admin role only.</summary>
+    private enum Access { Public, Player, Moderator, Gm, Admin }
 
     /// <summary>One API route; a "{}" segment matches any one segment and is handed to the handler.</summary>
     private sealed record Route(string Method, string[] Segments, Access Access, Func<Call, Task<Reply>> Handler);
@@ -175,17 +187,23 @@ public sealed partial class PanelSite
     {
         public static Reply Ok(object body) => new(StatusCodes.Status200OK, body);
         public static Reply Error(int status, string message) => new(status, new { error = message });
+        /// <summary>The handler wrote the response itself (a file download).</summary>
+        public static Reply Sent => new(0, null);
     }
 
-    /// <summary>A request on its way through the API: the signed-in account, if any, and the route's arguments.</summary>
-    private sealed class Call(HttpContext context, string? account, bool admin, string? sessionId, string[] args, IPAddress? client)
+    /// <summary>A request on its way through the API: the signed-in account, if any, its staff role and the route's arguments.</summary>
+    private sealed class Call(HttpContext context, string? account, PanelRole role, string? sessionId, string[] args, RequestClient from)
     {
         public HttpContext Context { get; } = context;
         public string? Account { get; } = account;
-        public bool Admin { get; } = admin;
+        public PanelRole Role { get; } = role;
+        /// <summary>Any staff role: what the admin area shows read-only (an account behind a character, every sheet).</summary>
+        public bool Admin => Role != PanelRole.None;
         public string? SessionId { get; } = sessionId;
         public string[] Args { get; } = args;
-        public IPAddress? Client { get; } = client;
+        /// <summary>The client and whether a proxy forwarded the request (the credential budget needs both).</summary>
+        public RequestClient From { get; } = from;
+        public IPAddress? Client => From.Address;
         /// <summary>The account of a player or admin route (DispatchAsync refused the request without one).</summary>
         public string Signed => Account ?? throw new InvalidOperationException("A signed-in route ran without an account.");
         public string Query(string key) => Context.Request.Query[key].ToString();
@@ -206,7 +224,12 @@ public sealed partial class PanelSite
         var matches = _routes.Where(r => Matches(r.Segments, segments)).ToList();
         var route = matches.FirstOrDefault(r => string.Equals(r.Method, context.Request.Method, StringComparison.OrdinalIgnoreCase));
         Reply reply;
-        if (route == null)
+        if (!HostAllowed(context))
+        {
+            NoteRefusedHost(context.Request);
+            reply = Reply.Error(StatusCodes.Status404NotFound, "Not found.");
+        }
+        else if (route == null)
         {
             reply = matches.Count == 0 ? Reply.Error(StatusCodes.Status404NotFound, "Not found.")
                 : Reply.Error(StatusCodes.Status405MethodNotAllowed, "Method not allowed.");
@@ -222,9 +245,44 @@ public sealed partial class PanelSite
                 reply = Reply.Error(StatusCodes.Status500InternalServerError, "The server could not finish this request.");
             }
         }
+        if (reply.Status == 0) return;
         response.StatusCode = reply.Status;
         if (reply.Body != null) await response.WriteAsJsonAsync(reply.Body, reply.Body.GetType(), Json, context.RequestAborted);
     }
+
+    /// <summary>
+    /// The API answers a loopback connection only under this machine's name or the panel's public one (PublicUrl): a page
+    /// whose own name resolves to 127.0.0.1 (DNS rebinding) is same-origin with itself, so its scripts could otherwise
+    /// read the CSRF token and call the API of a panel that listens on loopback. Behind a trusted proxy without a
+    /// PublicUrl the proxy's name is unknown here, so its forwarded requests pass; other peers are not loopback and
+    /// cannot be reached by rebinding.
+    /// </summary>
+    private bool HostAllowed(HttpContext context)
+    {
+        if (context.Connection.RemoteIpAddress is not { } peer || !System.Net.IPAddress.IsLoopback(ClientAddresses.Normalize(peer))) return true;
+        if (ClientAddresses.LoopbackHost(context.Request)) return true;
+        if (Uri.TryCreate(_options.PublicUrl, UriKind.Absolute, out var url))
+            return string.Equals(context.Request.Host.Host, url.Host, StringComparison.OrdinalIgnoreCase);
+        return _clients.FromTrustedProxy(context) && ClientAddresses.IsForwarded(context.Request);
+    }
+
+    private long _hostRefusalLogged;
+
+    /// <summary>
+    /// A proxy that keeps the player's Host, with neither option set, sees only 404s from the API while the pages load.
+    /// One warning per ten minutes tells the operator why, without a flood of them for a rebinding page.
+    /// </summary>
+    private void NoteRefusedHost(HttpRequest request)
+    {
+        long now = Environment.TickCount64, last = Interlocked.Read(ref _hostRefusalLogged);
+        if (last != 0 && now - last < 600_000 || Interlocked.CompareExchange(ref _hostRefusalLogged, now, last) != last) return;
+        string host = request.Host.Host;
+        LogHostRefused(_log, host.Length <= 100 ? host : host[..100]);
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Panel: refused API requests for Host '{Host}'. If a proxy serves the panel " +
+        "under that name, set Ro3Emu:Panel:PublicUrl or Ro3Emu:Panel:TrustedProxies (docs/guide/panel.md)")]
+    private static partial void LogHostRefused(ILogger logger, string host);
 
     private static bool Matches(string[] pattern, string[] segments) =>
         pattern.Length == segments.Length && pattern.Zip(segments).All(p => p.First == "{}" || string.Equals(p.First, p.Second, StringComparison.Ordinal));
@@ -240,9 +298,9 @@ public sealed partial class PanelSite
             account = null;
         }
         if (account == null) sessionId = null;
-        bool admin = account != null && _backend.IsAdmin(account);
+        var role = account == null ? PanelRole.None : await StaffRoleAsync(account, context.Request);
         if (route.Access != Access.Public && account == null) return Reply.Error(StatusCodes.Status401Unauthorized, "Please log in.");
-        if (route.Access == Access.Admin && !admin) return Reply.Error(StatusCodes.Status403Forbidden, "Only an admin can open this page.");
+        if (Needed(route.Access) is { } needed && role < needed) return Reply.Error(StatusCodes.Status403Forbidden, Refusal(needed));
         if (route.Method == "POST")
         {
             if (!SameOrigin(context.Request) || !PanelSessions.Matches(context.Request.Headers[CsrfHeader], ExpectedCsrf(context, sessionId)))
@@ -250,7 +308,7 @@ public sealed partial class PanelSite
             if (!_backend.Accepting) return Reply.Error(StatusCodes.Status503ServiceUnavailable, "The server is stopping.");
         }
         string[] args = [.. route.Segments.Zip(segments).Where(p => p.First == "{}").Select(p => Uri.UnescapeDataString(p.Second))];
-        return await route.Handler(new Call(context, account, admin, sessionId, args, ClientAddress(context)));
+        return await route.Handler(new Call(context, account, role, sessionId, args, _clients.Of(context)));
     }
 
     /// <summary>The token a POST must carry: bound to the session cookie, or to the visitor cookie before a login.</summary>
@@ -271,23 +329,7 @@ public sealed partial class PanelSite
             && string.Equals(uri.Authority, request.Host.Value, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static IPAddress Normalize(IPAddress address) => address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
-
-    /// <summary>The client: the connection's peer, or behind a trusted proxy the last address it forwarded.</summary>
-    private IPAddress? ClientAddress(HttpContext context)
-    {
-        if (context.Connection.RemoteIpAddress is not { } peer) return null;
-        peer = Normalize(peer);
-        if (!_proxies.Contains(peer)) return peer;
-        string forwarded = context.Request.Headers["X-Forwarded-For"].ToString();
-        string last = forwarded.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? "";
-        return IPAddress.TryParse(last, out var client) ? Normalize(client) : peer;
-    }
-
-    /// <summary>https to the browser: the connection itself, or a trusted proxy's X-Forwarded-Proto.</summary>
-    private bool Https(HttpContext context) =>
-        context.Request.IsHttps || context.Connection.RemoteIpAddress is { } peer && _proxies.Contains(Normalize(peer))
-            && string.Equals(context.Request.Headers["X-Forwarded-Proto"].ToString().Split(',')[^1].Trim(), "https", StringComparison.OrdinalIgnoreCase);
+    private bool Https(HttpContext context) => _clients.Https(context);
 
     private void SetCookie(HttpContext context, string name, string value) =>
         context.Response.Cookies.Append(name, value, new CookieOptions

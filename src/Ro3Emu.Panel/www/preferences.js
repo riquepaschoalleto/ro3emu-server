@@ -5,7 +5,6 @@
   const stored = key => { try { return localStorage.getItem(key); } catch { return null; } };
   const save = (key, value) => { try { localStorage.setItem(key, value); } catch { /* storage disabled */ } };
   let language = stored('ro3p-language') === 'en' ? 'en' : 'pt-BR';
-  let theme = stored('ro3p-theme') === 'dark' ? 'dark' : 'light';
   const sources = new WeakMap();
   const attrs = new WeakMap();
 
@@ -113,25 +112,12 @@
   });
 
   function controls() {
-    const lang = document.getElementById('panel-language');
-    const themeButton = document.getElementById('panel-theme');
-    if (lang) {
-      lang.value = language;
-      lang.setAttribute('aria-label', language === 'en' ? 'Panel language' : 'Idioma do painel');
-    }
-    if (themeButton) {
-      const nextDark = theme !== 'dark';
-      const label = nextDark
-        ? (language === 'en' ? 'Dark' : 'Escuro')
-        : (language === 'en' ? 'Light' : 'Claro');
-      themeButton.textContent = (nextDark ? '☾ ' : '☀ ') + label;
-      themeButton.setAttribute('aria-label', (language === 'en' ? 'Switch to ' : 'Mudar para tema ') +
-        (language === 'en' ? label.toLowerCase() + ' theme' : label.toLowerCase()));
-      themeButton.setAttribute('title', themeButton.getAttribute('aria-label'));
-      themeButton.setAttribute('aria-pressed', String(theme === 'dark'));
+    const selector = document.getElementById('panel-language');
+    if (selector) {
+      selector.value = language;
+      selector.setAttribute('aria-label', language === 'en' ? 'Panel language' : 'Idioma do painel');
     }
   }
-
   function setLanguage(value) {
     language = value === 'en' ? 'en' : 'pt-BR';
     document.documentElement.lang = language;
@@ -140,22 +126,9 @@
     try { walk(document.documentElement); } finally { batching = false; }
     controls();
   }
-  function setTheme(value) {
-    theme = value === 'dark' ? 'dark' : 'light';
-    document.documentElement.dataset.theme = theme;
-    document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', theme);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#12172b' : '#dfe4fc');
-    save('ro3p-theme', theme);
-    controls();
-  }
-
-  // Prevent a flash of the opposite theme before the full application renders.
-  document.documentElement.dataset.theme = theme;
   document.documentElement.lang = language;
   document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('panel-language')?.addEventListener('change', e => setLanguage(e.target.value));
-    document.getElementById('panel-theme')?.addEventListener('click', () => setTheme(theme === 'dark' ? 'light' : 'dark'));
-    setTheme(theme);
+    document.getElementById('panel-language')?.addEventListener('change', event => setLanguage(event.target.value));
     setLanguage(language);
     observer.observe(document.documentElement, {
       subtree: true, childList: true, characterData: true, attributes: true,
@@ -163,8 +136,6 @@
     });
   });
   window.RO3PanelPreferences = Object.freeze({
-    get language() { return language; },
-    get theme() { return theme; },
-    setLanguage, setTheme
+    get language() { return language; }, setLanguage
   });
 })();

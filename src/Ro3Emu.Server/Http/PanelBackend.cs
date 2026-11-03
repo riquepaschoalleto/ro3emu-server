@@ -19,7 +19,9 @@ namespace Ro3Emu.Server.Http;
 /// </summary>
 public sealed partial class PanelBackend(IOptions<ServerOptions> options, AccountStore accounts, RankService ranks, GameData data,
     GameLoop loop, SessionRegistry sessions, ReconnectService reconnect, Diagnostics.SessionCensus census,
-    Diagnostics.ServerMetrics metrics, CredentialLimiter limiter, TimeProvider clock) : IPanelBackend
+    Diagnostics.ServerMetrics metrics, CredentialLimiter limiter, TimeProvider clock, StaffRoles staff,
+    TerritoryWarsService territory, MvpService mvp, TimedTodoSchedule todo, ActivityClock activities, SeasonService seasons,
+    TestingSwitches testing, CheatMonitor cheats, Maps.WorldData world) : IPanelBackend
 {
     /// <summary>JobConfig 1000, Novice: the root of every class line (TrainingService.RootJob); its children are the classes.</summary>
     private const long Novice = 1000;
@@ -54,9 +56,9 @@ public sealed partial class PanelBackend(IOptions<ServerOptions> options, Accoun
 
     public bool Accepting => loop.Phase == GameLoopPhase.Accepting;
 
-    public bool TryAcquireCredentialCheck(IPAddress? remote) => limiter.TryAcquire(remote);
+    public bool TryAcquireCredentialCheck(Ro3Emu.Panel.RequestClient client) => limiter.TryAcquire(client);
 
-    public bool IsAdmin(string account) => options.Value.GmAccounts.Contains(account, StringComparer.Ordinal);
+    public bool IsAdmin(string account) => staff.RoleOf(account) != PanelRole.None;
 
     public int PlayersOnline() => census.Current.Roles.Count;
 

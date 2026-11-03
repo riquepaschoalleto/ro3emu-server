@@ -38,7 +38,9 @@ public sealed partial class ShopService(GameData data, CharacterService characte
     private readonly MailService _mail = mail;
     private readonly ILogger<ShopService> _log = log;
     private TimeSpan _lastTick;
-    private DateTime _gameDay;
+    /// <summary>The game day the online roles were last synced for. Taken when the server starts: taken by the first
+    /// throttled tick instead (a second into the loop), it missed a rollover that came before it.</summary>
+    private DateTime _gameDay = DailyActivityService.GameDay(clock.GetLocalNow().DateTime);
     private long Now => _clock.GetUtcNow().ToUnixTimeSeconds();
 
     /// <summary>
@@ -51,9 +53,7 @@ public sealed partial class ShopService(GameData data, CharacterService characte
         _lastTick = time.Now;
         var day = DailyActivityService.GameDay(_clock.GetLocalNow().DateTime);
         if (day == _gameDay) return;
-        bool first = _gameDay == default;
         _gameDay = day;
-        if (first) return;
         foreach (var session in _sessions.All())
             if (session.Role != null && session.Shop is { Bought.Count: > 0 })
                 _loop.PostOwned(session, () => session.Shop != null && session.Role != null ? SyncAsync(session) : Task.CompletedTask);
@@ -62,8 +62,8 @@ public sealed partial class ShopService(GameData data, CharacterService characte
     /// <summary>Saved per role: purchase counters with the period they were counted in, and favourites.</summary>
     public sealed class ShopState
     {
-        public Dictionary<int, Counter> Bought { get; set; } = new();
-        public HashSet<int> Favorites { get; set; } = new();
+        public Dictionary<int, Counter> Bought { get; set; } = [];
+        public HashSet<int> Favorites { get; set; } = [];
     }
 
     public sealed class Counter
@@ -328,13 +328,12 @@ public sealed partial class ShopService(GameData data, CharacterService characte
     /// <summary>_kAppearanceParts: a JSON array of WardRobeConfig ids, or {} when empty.</summary>
     private static List<int> Parts(JsonElement commodity) =>
         commodity.TryGetProperty("_kAppearanceParts", out var parts) && parts.ValueKind == JsonValueKind.Array
-            ? parts.EnumerateArray().Select(p => (long)(GameData.Number(p) ?? 0)).Where(id => id is > 0 and <= int.MaxValue)
-                .Select(id => (int)id).ToList()
+            ? [.. parts.EnumerateArray().Select(p => (long)(GameData.Number(p) ?? 0)).Where(id => id is > 0 and <= int.MaxValue).Select(id => (int)id)]
             : [];
 
     private static ShopState Copy(ShopState state) => new()
     {
-        Favorites = new HashSet<int>(state.Favorites),
+        Favorites = [.. state.Favorites],
         Bought = state.Bought.ToDictionary(p => p.Key, p => new Counter { Count = p.Value.Count, Period = p.Value.Period }),
     };
 
@@ -384,7 +383,7 @@ public sealed partial class ShopService(GameData data, CharacterService characte
         {
             var next = new ShopState
             {
-                Favorites = new HashSet<int>(session.Shop!.Favorites),
+                Favorites = [.. session.Shop!.Favorites],
                 Bought = session.Shop.Bought.ToDictionary(p => p.Key, p => new Counter { Count = p.Value.Count, Period = p.Value.Period }),
             };
             if (req.OpType == CollectOperateType.Add) next.Favorites.Add(req.CommodityId);

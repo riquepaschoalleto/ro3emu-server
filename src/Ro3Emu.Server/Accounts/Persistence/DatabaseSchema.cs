@@ -34,5 +34,7 @@ internal static class DatabaseSchema
         new GiftCodeSchemaPlan(),
         new AccountBanSchemaPlan(),
         new PanelSchemaPlan(),
+        new PanelSecuritySchemaPlan(),
+        new AntiCheatSchemaPlan(),
     ];
 }

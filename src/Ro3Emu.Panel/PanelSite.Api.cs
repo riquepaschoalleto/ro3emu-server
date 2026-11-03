@@ -37,10 +37,14 @@ public sealed partial class PanelSite
         Post("/api/account/password", Access.Player, ChangePasswordAsync),
     ];
 
-    private object SessionBody(string? account, string csrf) => new
+    /// <param name="role">The staff role the routes grant (none while a required second factor is off).</param>
+    private object SessionBody(string? account, PanelRole role, string csrf) => new
     {
         account,
-        admin = account != null && _backend.IsAdmin(account),
+        admin = role != PanelRole.None,
+        role = PanelRoles.Key(role),
+        // A GM or Admin whose required second factor is not on yet: the page asks to turn it on.
+        twoFactorRequired = account != null && role == PanelRole.None && NeedsTwoFactor(_ops.RoleOf(account)),
         csrf,
         registration = _options.Registration,
         server = BrandBody(),
@@ -49,7 +53,7 @@ public sealed partial class PanelSite
     /// <summary>Who is signed in, and the CSRF token for the next POST (a visitor cookie is set before a login).</summary>
     private Task<Reply> SessionAsync(Call call)
     {
-        if (call.SessionId != null) return Task.FromResult(Reply.Ok(SessionBody(call.Account, _sessions.Csrf("session", call.SessionId))));
+        if (call.SessionId != null) return Task.FromResult(Reply.Ok(SessionBody(call.Account, call.Role, _sessions.Csrf("session", call.SessionId))));
         string? visitor = call.Context.Request.Cookies[VisitorCookie];
         if (string.IsNullOrEmpty(visitor) || visitor.Length > 64)
         {
@@ -57,17 +61,23 @@ public sealed partial class PanelSite
             SetCookie(call.Context, VisitorCookie, visitor);
         }
         if (call.Context.Request.Cookies.ContainsKey(SessionCookie)) ClearCookie(call.Context, SessionCookie);
-        return Task.FromResult(Reply.Ok(SessionBody(null, _sessions.Csrf("visitor", visitor))));
+        return Task.FromResult(Reply.Ok(SessionBody(null, PanelRole.None, _sessions.Csrf("visitor", visitor))));
     }
 
-    /// <summary>A new session for <paramref name="account"/>: a fresh id (never the one sent before the login).</summary>
-    private Reply SignIn(Call call, string account)
+    /// <summary>
+    /// A new session for <paramref name="account"/>: a fresh id (never the one sent before the login), recorded in the
+    /// account's login history.
+    /// </summary>
+    private async Task<Reply> SignInAsync(Call call, string account)
     {
         _sessions.End(call.SessionId);
-        string sessionId = _sessions.Create(account);
+        string sessionId = _sessions.Create(account, _options.LoginAddresses ? call.Client?.ToString() : null,
+            call.Context.Request.Headers.UserAgent.ToString());
         SetCookie(call.Context, SessionCookie, sessionId);
         ClearCookie(call.Context, VisitorCookie);
-        return Reply.Ok(SessionBody(account, _sessions.Csrf("session", sessionId)));
+        await _ops.RecordLoginAsync(account, "panel", call.Client);
+        LogLogin(_log, account);
+        return Reply.Ok(SessionBody(account, await StaffRoleAsync(account, call.Context.Request), _sessions.Csrf("session", sessionId)));
     }
 
     private async Task<Reply> LoginAsync(Call call)
@@ -76,12 +86,14 @@ public sealed partial class PanelSite
         string name = form?.Account?.Trim() ?? "", password = form?.Password ?? "";
         if (name.Length == 0 || password.Length == 0)
             return Reply.Error(StatusCodes.Status400BadRequest, "Enter your account name and password.");
-        if (!_backend.TryAcquireCredentialCheck(call.Client)) return Reply.Error(StatusCodes.Status429TooManyRequests, TooManyAttempts);
+        if (!_backend.TryAcquireCredentialCheck(call.From)) return Reply.Error(StatusCodes.Status429TooManyRequests, TooManyAttempts);
         // Null for a wrong password, an unknown name and a banned account alike, as the game's login answers.
         if (await _backend.VerifyAsync(name, password) is not { } account)
             return Reply.Error(StatusCodes.Status401Unauthorized, WrongCredentials);
-        LogLogin(_log, account);
-        return SignIn(call, account);
+        // With a second factor the password only opens a challenge; the session comes with the code (LoginCodeAsync).
+        if ((await _ops.TwoFactorAsync(account)).Enabled)
+            return Reply.Ok(new { twoFactor = true, challenge = _sessions.Challenge(account), csrf = ExpectedCsrf(call.Context, null) });
+        return await SignInAsync(call, account);
     }
 
     private Task<Reply> LogoutAsync(Call call)
@@ -98,22 +110,40 @@ public sealed partial class PanelSite
         var form = await BodyAsync<Credentials>(call);
         string name = form?.Account?.Trim() ?? "", password = form?.Password ?? "";
         if ((NameProblem(name) ?? PasswordProblem(password)) is { } problem) return Reply.Error(StatusCodes.Status400BadRequest, problem);
-        if (!_backend.TryAcquireCredentialCheck(call.Client)) return Reply.Error(StatusCodes.Status429TooManyRequests, TooManyAttempts);
+        if (!_backend.TryAcquireCredentialCheck(call.From)) return Reply.Error(StatusCodes.Status429TooManyRequests, TooManyAttempts);
+        if (_signUps.TryReserve(call.Client, out var slot) is var refusal and not PanelSignUps.Refusal.None)
+        {
+            bool perAddress = refusal == PanelSignUps.Refusal.Address;
+            // The address only where the operator keeps addresses (PanelOptions.LoginAddresses).
+            string? address = _options.LoginAddresses ? call.Client?.ToString() : null;
+            LogSignUpLimited(_log, name, address, perAddress ? "per address" : "per hour");
+            return Reply.Error(StatusCodes.Status429TooManyRequests, perAddress
+                ? "Too many accounts were made from your network today. Try again tomorrow."
+                : "Sign-up is busy right now. Try again in an hour.");
+        }
         var result = await _backend.RegisterAsync(name, password);
+        if (result != PanelRegistration.Created) _signUps.Release(slot);
         LogRegistration(_log, name, result);
         return result switch
         {
-            PanelRegistration.Created => SignIn(call, name),
+            PanelRegistration.Created => await SignInAsync(call, name),
             PanelRegistration.Invalid => Reply.Error(StatusCodes.Status400BadRequest, "This account name cannot be used."),
             // A banned name answers like a taken one: the page does not reveal a ban.
             _ => Reply.Error(StatusCodes.Status409Conflict, "This account name is taken."),
         };
     }
 
+    /// <summary>
+    /// A new account's name on the panel's sign-up: the rule of every new account (AccountNames, also the game's first
+    /// login), then 4 to 24 ASCII letters, digits and underscores. (inferred) The second part is the panel's own, for
+    /// names typed on a public website; neither applies to logins, so an account the game created can always log in.
+    /// </summary>
+    internal const int SignUpNameMin = 4, SignUpNameMax = 24;
+
     internal static string? NameProblem(string name) =>
-        name.Length == 0 ? "Choose an account name."
-        : name.Length > NameMax ? "An account name has at most 64 characters."
-        : name.Any(char.IsControl) ? "An account name cannot contain control characters."
+        AccountNames.Problem(name) is { } shared && name.Length <= SignUpNameMax ? shared
+        : name.Length is < SignUpNameMin or > SignUpNameMax ? "An account name has 4 to 24 characters."
+        : !name.All(c => char.IsAsciiLetterOrDigit(c) || c == '_') ? "An account name has only letters (A to Z), digits and underscores."
         : null;
 
     internal static string? PasswordProblem(string password) =>
@@ -127,7 +157,7 @@ public sealed partial class PanelSite
         string current = form?.Current ?? "", next = form?.Next ?? "";
         if (current.Length == 0) return Reply.Error(StatusCodes.Status400BadRequest, "Enter your current password.");
         if (PasswordProblem(next) is { } problem) return Reply.Error(StatusCodes.Status400BadRequest, problem);
-        if (!_backend.TryAcquireCredentialCheck(call.Client)) return Reply.Error(StatusCodes.Status429TooManyRequests, TooManyAttempts);
+        if (!_backend.TryAcquireCredentialCheck(call.From)) return Reply.Error(StatusCodes.Status429TooManyRequests, TooManyAttempts);
         string account = call.Signed;
         if (!await _backend.ChangePasswordAsync(account, current, next))
             return Reply.Error(StatusCodes.Status400BadRequest, "Your current password is not right.");
@@ -191,6 +221,9 @@ public sealed partial class PanelSite
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Panel sign-up {Account}: {Result}")]
     private static partial void LogRegistration(ILogger logger, string account, PanelRegistration result);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Panel sign-up {Account} from {Address}: refused, the {Budget} sign-up limit is used up")]
+    private static partial void LogSignUpLimited(ILogger logger, string account, string? address, string budget);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Panel password change {Account}")]
     private static partial void LogPasswordChanged(ILogger logger, string account);

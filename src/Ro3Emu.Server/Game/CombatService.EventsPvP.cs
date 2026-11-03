@@ -12,7 +12,7 @@ namespace Ro3Emu.Server.Game;
 public sealed partial class CombatService
 {
     private sealed record EventAttack(GameSession Target, int SkillId, long NextSwing, float StartX, float StartZ);
-    private readonly Dictionary<GameSession, EventAttack> _eventAttacks = new();
+    private readonly Dictionary<GameSession, EventAttack> _eventAttacks = [];
     private Func<GameSession, GameSession, bool>? _eventCanFight;
     private Func<GameSession, GameSession, Task>? _eventPlayerKilled;
 
@@ -38,7 +38,7 @@ public sealed partial class CombatService
     {
         float radius = (row.TryGetProperty("_kRange", out var range) && range.ValueKind == JsonValueKind.Array
             && range.GetArrayLength() > 0 ? (float)(Data.GameData.Number(range[0]) ?? 300) : 300) / 100f;
-        return _sessions.All().Where(p => CanPlayerHit(source, p) && PlayerDistance(source, p) <= radius + .5f).ToArray();
+        return [.. _sessions.All().Where(p => CanPlayerHit(source, p) && PlayerDistance(source, p) <= radius + .5f)];
     }
 
     private async Task SwingEventAsync(GameSession source, GameSession target, int skillId, long session)
@@ -59,7 +59,11 @@ public sealed partial class CombatService
     private async Task HitEventPlayersAsync(GameSession source, GameSession[] targets, JsonElement row,
         int skillId, int show, long session, Func<bool> currentSource, Action<long, long>? onHit = null, Vec3? center = null)
     {
-        if (FirstNumber(row, "_kDamageParam1") is not > 0 && FirstNumber(row, "_kDamageParam2") is not > 0) return;
+        if (FirstNumber(row, "_kDamageParam1") is not > 0 && FirstNumber(row, "_kDamageParam2") is not > 0)
+        {
+            foreach (var target in targets) await PvpHitDebuffsAsync(source, target, row, currentSource);
+            return;
+        }
         foreach (var target in targets)
         {
             if (!currentSource()) break;
@@ -91,7 +95,7 @@ public sealed partial class CombatService
                     DstElement = 1, IsDead = hp == 0 } }
                 };
                 var sourceViewers = CurrentPlayerHit(source, target, attackerRole, targetRole, sceneId)
-                    ? _world.Viewers(source).Append(source) : Enumerable.Empty<GameSession>();
+                    ? _world.Viewers(source).Append(source) : [];
                 var hitViewers = sourceViewers.Concat(_world.Viewers(target)).Append(target).Distinct().ToArray();
                 await SendHitBulletsAsync(hitViewers, row, hit, attackerRole.Id);
                 foreach (var viewer in hitViewers) await viewer.SendGameAsync(SkillHit, hit);
@@ -103,6 +107,8 @@ public sealed partial class CombatService
                 // The knockback or pull of a hit that left the target alive, as the same skill moves a monster.
                 if (hp > 0 && currentSource() && CurrentPlayerHit(source, target, attackerRole, targetRole, sceneId))
                     await DisplacePlayerAsync(source, target, row, skillId, center);
+                if (hp > 0) await PvpHitDebuffsAsync(source, target, row,
+                    () => currentSource() && CurrentPlayerHit(source, target, attackerRole, targetRole, sceneId));
                 if (hp == 0)
                 {
                     if (!ReferenceEquals(target.Role, targetRole)) continue;
@@ -121,6 +127,18 @@ public sealed partial class CombatService
             finally { if (hp == 0) ReleaseDeathPublication(target); }
         }
     }
+
+    /// <summary>The row's _kBuff2 on the player it hit, rolled as on a monster. A guardian effect has its own path
+    /// (GuardianPlayerDebuffsAsync). After the hit, so the hit does not break a Sleep it brought itself.</summary>
+    private async Task PvpHitDebuffsAsync(GameSession source, GameSession target, JsonElement row, Func<bool> current)
+    {
+        if (IsGuardianEffect(row)) return;
+        foreach (var tuple in HostileBuffs(row))
+            if (current() && CanPlayerHit(source, target) && RollHostileBuff(tuple, source, null, target, null, out int id, out int duration))
+                await _buffs.AddAsync(target, id, duration, source.Role!.Id);
+    }
+
+    private static IEnumerable<JsonElement> HostileBuffs(JsonElement row) => Tuples(row, "_kBuff2");
 
     private void TickEventPvP(long now)
     {

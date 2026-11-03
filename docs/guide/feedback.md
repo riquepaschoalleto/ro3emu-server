@@ -67,12 +67,16 @@ The context comes from an in-memory ring of the last 4096 log lines (`Diagnostic
 
 ## Reading reports (operator)
 
-Loopback only, on the server machine:
+On the web panel: **Admin → Reports** ([web panel](panel.md#report-inbox)) lists them with a status (new, in progress,
+done, won't fix), an assignee and notes, for every staff role.
+
+On the server machine, with the operator token from the data dir ([GM access](gm-access.md#the-loopback-tool)):
 
 ```bash
-curl -s 'http://127.0.0.1:5380/ro3emu/reports?format=text'          # all, readable
-curl -s 'http://127.0.0.1:5380/ro3emu/reports?since=12'             # JSON, reports after #12
-curl -s 'http://127.0.0.1:5380/ro3emu/reports?since=2026-10-12T00:00:00Z&limit=50'
+op="X-Ro3Emu-Operator: $(cat data/operator.token)"
+curl -s -H "$op" 'http://127.0.0.1:5380/ro3emu/reports?format=text'          # all, readable
+curl -s -H "$op" 'http://127.0.0.1:5380/ro3emu/reports?since=12'             # JSON, reports after #12
+curl -s -H "$op" 'http://127.0.0.1:5380/ro3emu/reports?since=2026-10-12T00:00:00Z&limit=50'
 ```
 
 `since` is a report id (reports after it) or an ISO-8601 time (reports at or after it); `limit` 1-1000 (default 200),

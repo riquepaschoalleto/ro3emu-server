@@ -88,3 +88,9 @@ Posteriormente, foram criadas cópias locais de teste e uma compilação anterio
 - Manual atualizado: [05_WEB_PANEL_E_TESTES.md](05_WEB_PANEL_E_TESTES.md). Manual upstream do painel: [docs/guide/panel.md](../guide/panel.md).
 - **Confirmado remotamente:** sincronização GitHub e criação desses arquivos. **Não confirmado no PC:** pull, build, inicialização, exportação dos ~2.500 PNG, acesso HTTP, migrações e testes in-game. Não afirmar que as animações [1]/[4] foram corrigidas antes de testar.
 - Instalação principal `RO3Emu` e cliente principal `ROO_PC` permanecem fora do escopo. Sem sobrescrever seus dados ou baixar outra cópia do cliente.
+
+## Referencia atual: upstream PR 358 (03/11/2026)
+
+Integracao na branch de desenvolvimento a partir de aethai/ro3emu-server 945ba9475ac5e97ebce3a07c3eb1f3e1adf9890e, 409 commits posteriores a #207. Os arquivos de teste e docs/PROJETO foram preservados. A traducao PT-BR/English foi estendida para 599 entradas; o tema personalizado foi substituido pelo tema nativo do desenvolvedor, com controles no rodape. A branch principal do fork permanece intocada.
+
+A integracao no GitHub nao comprova build ou execucao no Windows. Validar somente no ambiente TESTE e nao promover automaticamente para a instalacao principal. Os resumos antigos abaixo sao historicos.

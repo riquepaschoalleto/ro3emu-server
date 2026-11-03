@@ -110,3 +110,9 @@ O usuário relatou que **a árvore de habilidades está bastante problemática**
 **Upstream consultado:** PR [#56](https://github.com/aethai/ro3emu-server/pull/56), merge em 22/10/2026, commit `84bffd99c89c42006ff120a084fecb21682b3755`, adiciona execução de vários efeitos das **passivas** da árvore e corrige mapeamentos de passivas anteriores. **Não atesta correção de layout, alocação ou organização visual da árvore.** Issue [#15](https://github.com/aethai/ro3emu-server/issues/15) (talento não desbloqueava, versão 1.0.4) foi encerrada; não vincular automaticamente ao bug atual. No momento da consulta, upstream estava 3 commits à frente do último SHA upstream sincronizado no fork (`047f05cf`); **não atualizar build ou main sem processo de integração e validação**.
 
 **Próximo dado necessário:** uma imagem da árvore problemática ou descrição exata de um erro reproduzível para separar cliente/UI de regras de progressão no servidor; somente então abrir intervenção localizada. **Prioridade elevada** em relação a polimento visual secundário. Preservar danos e funcionamento atual, evitar novas pastas, reinstalações ou builds desnecessários.
+
+## Combate e desempenho apos upstream PR 358 (03/11/2026)
+
+O codigo da nova versao contem as correcoes oficiais: #234 (alvo nao reinicia swing), #290 (interrupcao do cast), #327 (arma/montaria definem ataque normal), #336 (tecla de ataque segurada nao acelera swing), #349/#355 (ataque cancelado por movimento), #350 (condicoes de habilidade), #353 (habilidade em movimento) e #317 (logs Lua causadores de microtravamentos em Auto-Battle).
+
+ATENCAO: nenhuma dessas alteracoes confirma a correcao visual das animacoes [1]/[4] ou da contagem grafica de cooldown no cliente de teste. Reproduzir e medir com clique unico, pressionamentos rapidos e batalha automatica antes de considerar os bugs resolvidos. Compilacao e teste local ainda pendentes.
