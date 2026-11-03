@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -16,6 +16,9 @@
 <link rel="stylesheet" href="/pages/wiki.css">
 <link rel="stylesheet" href="/pages/admin-staff.css">
 <link rel="stylesheet" href="/pages/players.css">
+<link rel="stylesheet" href="/preferences.css">
+<script src="/locale-ptbr.js" defer></script>
+<script src="/preferences.js" defer></script>
 <script src="/app.js" defer></script>
 <!-- Admin pages, each in its own file; they register with app.js before the first route. -->
 <script src="/pages/admin-tools.js" defer></script>
@@ -124,7 +127,6 @@
       <div class="menu-auth" id="menu-auth"></div>
     </nav>
     <div class="auth" id="auth"></div>
-    <button type="button" class="icon-btn theme-btn" id="theme" aria-label="Dark or light theme" title="Dark or light theme"><svg class="i moon"><use href="#i-moon"/></svg><svg class="i sun"><use href="#i-sun"/></svg></button>
     <button type="button" class="icon-btn menu-btn" id="menu" aria-label="Menu" aria-expanded="false" aria-controls="nav"><svg class="i"><use href="#i-menu"/></svg></button>
   </div>
 </header>
@@ -137,6 +139,13 @@
   <div class="wrap">
     <span class="brand"><svg class="i"><use href="#i-star"/></svg><span id="foot-name">RO3Emu</span></span>
     <span id="foot-text">A server for the Ragnarok 3 PC client. Not affiliated with the game's publishers.</span>
+    <div class="display-controls" role="group" aria-label="Panel preferences">
+      <select class="pref-language" id="panel-language" aria-label="Panel language" title="Panel language">
+        <option value="pt-BR">Português (BR)</option>
+        <option value="en">English</option>
+      </select>
+      <button type="button" class="icon-btn theme-btn" id="theme" aria-label="Dark or light theme" title="Dark or light theme"><svg class="i moon"><use href="#i-moon"/></svg><svg class="i sun"><use href="#i-sun"/></svg></button>
+    </div>
   </div>
 </footer>
 
