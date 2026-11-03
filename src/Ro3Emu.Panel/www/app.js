@@ -53,8 +53,7 @@ function toast(text) {
 
 // ---------------------------------------------------------------- formatting
 
-const numberFormat = new Intl.NumberFormat('en-US');
-const num = n => numberFormat.format(n ?? 0);
+const num = n => new Intl.NumberFormat(document.documentElement.lang === 'pt-BR' ? 'pt-BR' : 'en-US').format(n ?? 0);
 const pad = n => String(n).padStart(2, '0');
 /** A count with its noun: "1 character", "3 characters" (many: the plural when it is not one + "s"). */
 const plural = (n, one, many = one + 's') => `${num(n)} ${n === 1 ? one : many}`;
