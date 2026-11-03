@@ -106,3 +106,9 @@ Nao considerar nenhum item acima validado apenas pela sincronizacao no GitHub.
 - `src/Ro3Emu.Panel/www/preferences.js` não foi modificado; controles mantêm os IDs originais e as preferências salvas.
 - Verificação estática após publicação: oito links da navegação mantidos, controles exclusivamente no rodapé, breakpoints originais restaurados e nenhuma regra extra de geometria do header em `preferences.css`.
 - **Pendente:** atualizar e executar a compilação na instalação de TESTE do Windows e conferir o resultado visual. A instalação principal não foi modificada.
+
+## Integracao upstream PR 358 (03/11/2026)
+
+Base oficial: 945ba9475ac5e97ebce3a07c3eb1f3e1adf9890e. Integracao preparada em branch auxiliar, preservando a documentacao, o script de teste e a traducao PT-BR/English (599 entradas). O painel usa o tema nativo do upstream; o seletor de idioma e o botao de tema ficam no rodape. O sistema de tema personalizado anterior foi retirado.
+
+Nao houve compilacao .NET ou teste no Windows nesta operacao remota. Validar combate basico, Rajada de Flechas, cooldown grafico, auto-battle, login, 2FA, banco de teste e novos menus antes de usar a versao principal. Manter intocados cliente e dados principais.
