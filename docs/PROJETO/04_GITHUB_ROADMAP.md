@@ -56,3 +56,9 @@ Não enviar: `ROO_PC/`, executáveis e DLLs compilados, `.bytes`, dados extraíd
 ## Critério para passar de estabilização para conteúdo próprio
 
 Decisão do usuário **após** testes suficientes de combate e funcionalidade do servidor; não baseada apenas na passagem do tempo, no número de commits ou na existência de uma release.
+## Marco 03/11/2026: upstream #358
+
+- Integrar o commit upstream 945ba947 (409 commits apos #207) na branch dev/ro3-stabilization; nao atualizar main do fork.
+- Preservar PT-BR/English, atualizar vocabulario das paginas novas e usar exclusivamente o tema oficial claro/escuro, mantendo os controles no rodape.
+- Validar primeiro no Windows TESTE: build .NET Release, inicializacao do painel, contas GM/2FA, navegacao, banco, ataques [1]/[4], cooldown visual e Auto-Battle.
+- So apos resultado medido considerar a instalacao principal; nao baixar outra copia do cliente.
